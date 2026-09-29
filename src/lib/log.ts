@@ -32,7 +32,7 @@ export function writeEntry(h: Habit, date: DateKey, entry: Entry | null) {
     haptic(status === 'done' ? [10, 40, 18] : 12)
     if (streak > prevStreak && MILESTONES.includes(streak) && h.polarity === 'build') {
       confetti(90)
-      toast(`🔥 ${streak}-day streak on ${h.name}! ${streak >= 66 ? 'This is who you are now.' : 'Keep the chain going.'}`)
+      toast(`${streak}-day streak on ${h.name}. ${streak >= 66 ? 'This is who you are now.' : 'Keep the chain going.'}`)
     }
   } else if (status === 'missed' && prevStatus !== 'missed' && h.polarity === 'quit') {
     haptic(20)

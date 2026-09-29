@@ -8,7 +8,7 @@ const ALL = [0, 1, 2, 3, 4, 5, 6]
 
 function habit(p: Partial<Habit>): Habit {
   return {
-    id: 'h', name: 'x', emoji: '•', color: '#000', polarity: 'build', kind: 'check',
+    id: 'h', name: 'x', icon: 'leaf', color: '#000', polarity: 'build', kind: 'check',
     days: ALL, start: null, duration: 30, createdAt: addDays(T, -30), order: 0, ...p,
   }
 }

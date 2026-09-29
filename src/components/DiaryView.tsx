@@ -8,6 +8,8 @@ import { Camera, POSES } from './Camera'
 import { IconCamera, IconCompare, IconTrash, IconUpload } from './Icons'
 import { Sheet } from './Sheet'
 
+const short = (d: DateKey) => formatDay(d, { day: 'numeric', month: 'short' })
+
 function Compare({ a, b }: { a: PhotoView; b: PhotoView }) {
   const [pos, setPos] = useState(50)
   const ref = useRef<HTMLDivElement>(null)
@@ -16,7 +18,6 @@ function Compare({ a, b }: { a: PhotoView; b: PhotoView }) {
     const r = ref.current!.getBoundingClientRect()
     setPos(Math.min(100, Math.max(0, ((x - r.left) / r.width) * 100)))
   }
-  const days = diffDays(a.date, b.date)
   return (
     <div
       className="compare"
@@ -29,7 +30,9 @@ function Compare({ a, b }: { a: PhotoView; b: PhotoView }) {
       onPointerMove={(e) => dragging.current && update(e.clientX)}
       onPointerUp={() => (dragging.current = false)}
       role="slider"
-      aria-label="Before / after"
+      aria-label="Before and after"
+      aria-valuemin={0}
+      aria-valuemax={100}
       aria-valuenow={Math.round(pos)}
       tabIndex={0}
       onKeyDown={(e) => {
@@ -40,9 +43,16 @@ function Compare({ a, b }: { a: PhotoView; b: PhotoView }) {
       <img src={b.url} alt={`After, ${b.date}`} />
       <img src={a.url} alt={`Before, ${a.date}`} style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }} />
       <div className="divider" style={{ left: `${pos}%` }} />
-      <span className="tag" style={{ left: 10 }}>{formatDay(a.date, { month: 'short', day: 'numeric' })}</span>
-      <span className="tag" style={{ right: 10 }}>
-        {formatDay(b.date, { month: 'short', day: 'numeric' })} · +{days}d
+      <div className="knob" style={{ left: `${pos}%` }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="m9 7-5 5 5 5M15 7l5 5-5 5" />
+        </svg>
+      </div>
+      <span className="stamp" style={{ left: 12, top: 12 }}>
+        {short(a.date)}
+      </span>
+      <span className="stamp" style={{ right: 12, top: 12 }}>
+        {short(b.date)} · +{diffDays(a.date, b.date)} d
       </span>
     </div>
   )
@@ -57,7 +67,6 @@ export function DiaryView({ today }: { today: DateKey }) {
   const [viewing, setViewing] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
-  const [showTips, setShowTips] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const list = useMemo(() => (photos ?? []).filter((p) => filter === 'all' || p.pose === filter), [photos, filter])
@@ -73,14 +82,24 @@ export function DiaryView({ today }: { today: DateKey }) {
     return pool.length >= 2 ? [pool[0], pool[pool.length - 1]] : null
   }, [photos, picked, filter, pose])
 
-  useEffect(() => () => {
-    if (pending) URL.revokeObjectURL(pending.url)
-  }, [pending])
+  useEffect(
+    () => () => {
+      if (pending) URL.revokeObjectURL(pending.url)
+    },
+    [pending],
+  )
 
+  const pickFile = useCallback((capture: boolean) => {
+    const el = fileInput.current
+    if (!el) return
+    if (capture) el.setAttribute('capture', 'user')
+    else el.removeAttribute('capture')
+    el.click()
+  }, [])
   const unavailable = useCallback(() => {
     setCamera(false)
-    fileInput.current?.click()
-  }, [])
+    pickFile(true)
+  }, [pickFile])
 
   const onFile = async (f: File | undefined) => {
     if (!f) return
@@ -99,136 +118,121 @@ export function DiaryView({ today }: { today: DateKey }) {
 
   const viewingPhoto = photos?.find((p) => p.id === viewing)
   const first = photos?.[0]
+  const count = photos?.length ?? 0
 
   return (
     <div className="app">
-      <header className="topbar">
+      <header className="page-head">
         <div>
-          <div className="sub">{photos?.length ? `${photos.length} photos · since ${formatDay(first!.date, { month: 'short', day: 'numeric', year: 'numeric' })}` : 'See your change'}</div>
-          <h1>Photo diary</h1>
+          <div className="eyebrow">{count ? `${count} ${count === 1 ? 'photo' : 'photos'} · since ${short(first!.date)}` : 'See your change'}</div>
+          <h1>Diary</h1>
         </div>
-        {(photos?.length ?? 0) >= 2 && (
-          <button
-            className="icon-btn"
-            aria-pressed={picking}
-            onClick={() => {
-              setPicking((p) => !p)
-              setPicked([])
-            }}
-            aria-label="Pick two photos to compare"
-            style={picking ? { background: 'var(--accent-soft)', color: 'var(--accent)' } : undefined}
-          >
-            <IconCompare />
+        <div className="row" style={{ gap: 8 }}>
+          {count >= 2 && (
+            <button
+              className="icon-btn outline"
+              aria-pressed={picking}
+              onClick={() => {
+                setPicking((p) => !p)
+                setPicked([])
+              }}
+              aria-label="Pick two photos to compare"
+              style={picking ? { background: 'var(--ink)', color: 'var(--bg)', borderColor: 'var(--ink)' } : undefined}
+            >
+              <IconCompare />
+            </button>
+          )}
+          <button className="icon-btn outline" onClick={() => pickFile(false)} aria-label="Upload a photo">
+            <IconUpload />
           </button>
-        )}
+        </div>
       </header>
 
-      <input ref={fileInput} type="file" accept="image/*" capture="user" hidden onChange={(e) => onFile(e.target.files?.[0]).finally(() => (e.target.value = ''))} />
+      <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => onFile(e.target.files?.[0]).finally(() => (e.target.value = ''))} />
 
-      <div className="stack">
-        <div className="grid-2">
-          <button className="btn primary" style={{ minHeight: 52 }} onClick={() => setCamera(true)}>
-            <IconCamera width={20} /> Take photo
-          </button>
-          <button
-            className="btn"
-            style={{ minHeight: 52 }}
-            onClick={() => {
-              fileInput.current?.removeAttribute('capture')
-              fileInput.current?.click()
-              fileInput.current?.setAttribute('capture', 'user')
-            }}
-          >
-            <IconUpload width={20} /> Upload
-          </button>
+      {picking && (
+        <div className="panel small">
+          <b style={{ fontWeight: 600 }}>Pick two photos to compare</b> <span className="muted">· {picked.length} of 2 selected</span>
         </div>
+      )}
 
-        {picking && (
-          <div className="banner">
-            <span className="icon">↔️</span>
-            <div>
-              <strong>Pick two photos</strong>
-              {picked.length}/2 selected. Tap again to deselect.
-            </div>
-          </div>
-        )}
-
-        {pair && (
-          <div className="card" style={{ padding: 10 }}>
-            <Compare a={pair[0]} b={pair[1]} />
-            <p className="small muted" style={{ textAlign: 'center', marginTop: 8 }}>
-              Drag to compare · {diffDays(pair[0].date, pair[1].date)} days apart
+      {pair ? (
+        <Compare a={pair[0]} b={pair[1]} />
+      ) : (
+        photos && (
+          <div className="panel empty">
+            <h2>{count ? 'One more to compare' : 'Day one starts here'}</h2>
+            <p>
+              {count
+                ? `Take another ${filter === 'all' ? pose : filter} photo in a week or two and a before/after slider appears here.`
+                : 'Change is invisible day to day and obvious month to month. A photo every 1–2 weeks is enough.'}
             </p>
           </div>
-        )}
+        )
+      )}
 
-        {photos && photos.length === 0 && (
-          <div className="card empty">
-            <div className="big">📸</div>
-            <h2>Day one starts here</h2>
-            <p className="muted">
-              Change is invisible day-to-day and obvious month-to-month. Take a photo every 1–2 weeks and compare.
-            </p>
-          </div>
-        )}
-
-        <button className="small muted" style={{ textAlign: 'left', padding: '4px 4px' }} onClick={() => setShowTips((s) => !s)}>
-          {showTips ? '▾' : '▸'} Tips for photos you can actually compare
-        </button>
-        {showTips && (
-          <div className="card small" style={{ lineHeight: 1.6 }}>
-            • Same spot, same time of day (mornings are most consistent)
-            <br />• Face a window — soft, even light; no filters
-            <br />• Same clothes, same camera height and distance (~2 m)
-            <br />• Use the timer and the ghost overlay to line up
-            <br />• Front, side and back every 1–2 weeks is plenty
-          </div>
-        )}
-
-        {(photos?.length ?? 0) > 0 && (
-          <div className="chips scroll">
-            <button className="chip" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
-              All
+      <div className="row" style={{ gap: 8 }}>
+        <div className="segmented" style={{ flex: 1 }} role="group" aria-label="Filter by pose">
+          {(['all', 'front', 'side', 'back'] as const).map((p) => (
+            <button
+              key={p}
+              aria-pressed={filter === p}
+              onClick={() => {
+                setFilter(p)
+                if (p !== 'all') setPose(p)
+              }}
+            >
+              {p === 'all' ? 'All' : POSES.find((x) => x.id === p)!.label}
             </button>
-            {POSES.map((p) => (
-              <button key={p.id} className="chip" aria-pressed={filter === p.id} onClick={() => setFilter(p.id)}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {months.map(([month, items]) => (
-          <section key={month}>
-            <h3 className="section-title">{new Date(month + '-15').toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h3>
-            <div className="photo-grid">
-              {items.map((p) => {
-                const idx = picked.indexOf(p.id)
-                return (
-                  <button
-                    key={p.id}
-                    aria-pressed={idx >= 0}
-                    onClick={() => {
-                      if (!picking) return setViewing(p.id)
-                      setPicked((cur) => (cur.includes(p.id) ? cur.filter((x) => x !== p.id) : [...cur.slice(-1), p.id]))
-                    }}
-                  >
-                    <img src={p.url} alt={`${p.pose} ${p.date}`} loading="lazy" />
-                    <span className="d">{formatDay(p.date, { day: 'numeric', month: 'short' })}</span>
-                    {idx >= 0 && <span className="n">{idx + 1}</span>}
-                  </button>
-                )
-              })}
-            </div>
-          </section>
-        ))}
+          ))}
+        </div>
+        <button className="btn primary" onClick={() => setCamera(true)}>
+          <IconCamera width={18} /> Photo
+        </button>
       </div>
+
+      <details className="panel small" style={{ padding: '4px 16px' }}>
+        <summary style={{ minHeight: 44, display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 500 }}>Tips for photos you can compare</summary>
+        <ul className="muted" style={{ margin: '0 0 12px', paddingLeft: 18, lineHeight: 1.7 }}>
+          <li>Same spot and time of day — mornings are most consistent</li>
+          <li>Face a window for soft, even light; no filters</li>
+          <li>Same clothes, camera height and distance (about 2 m)</li>
+          <li>Use the self-timer and the ghost overlay to line up</li>
+        </ul>
+      </details>
+
+      {months.map(([month, items]) => (
+        <section key={month} className="group">
+          <h3 className="lbl">{new Date(month + '-15').toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h3>
+          <div className="photo-grid">
+            {items.map((p) => {
+              const idx = picked.indexOf(p.id)
+              return (
+                <button
+                  key={p.id}
+                  aria-pressed={idx >= 0}
+                  aria-label={`${p.pose} photo, ${short(p.date)}`}
+                  onClick={() => {
+                    if (!picking) return setViewing(p.id)
+                    setPicked((cur) => (cur.includes(p.id) ? cur.filter((x) => x !== p.id) : [...cur.slice(-1), p.id]))
+                  }}
+                >
+                  <img src={p.url} alt="" loading="lazy" />
+                  <span className="stamp">{short(p.date)}</span>
+                  {idx >= 0 && <span className="n">{idx + 1}</span>}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      ))}
 
       {camera && (
         <Camera
           pose={pose}
           setPose={setPose}
           ghostUrl={ghost?.url}
+          ghostLabel={ghost ? short(ghost.date) : undefined}
           onClose={() => setCamera(false)}
           onUnavailable={unavailable}
           onCapture={(blob) => {
@@ -241,12 +245,12 @@ export function DiaryView({ today }: { today: DateKey }) {
       {pending && <SavePhoto pending={pending} pose={pose} today={today} onClose={() => setPending(null)} />}
 
       {viewingPhoto && (
-        <Sheet title={formatDay(viewingPhoto.date, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })} onClose={() => setViewing(null)}>
-          <div className="stack viewer">
+        <Sheet title={formatDay(viewingPhoto.date, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })} onClose={() => setViewing(null)}>
+          <div className="stack viewer" style={{ gap: 16 }}>
             <img src={viewingPhoto.url} alt="" />
-            <div className="chips">
+            <div className="segmented" role="group" aria-label="Pose">
               {POSES.map((p) => (
-                <button key={p.id} className="chip" aria-pressed={viewingPhoto.pose === p.id} onClick={() => updatePhoto(viewingPhoto.id, { pose: p.id })}>
+                <button key={p.id} aria-pressed={viewingPhoto.pose === p.id} onClick={() => updatePhoto(viewingPhoto.id, { pose: p.id })}>
                   {p.label}
                 </button>
               ))}
@@ -264,7 +268,7 @@ export function DiaryView({ today }: { today: DateKey }) {
                 toast('Photo deleted')
               }}
             >
-              <IconTrash width={18} /> Delete photo
+              <IconTrash width={16} /> Delete photo
             </button>
           </div>
         </Sheet>
@@ -276,13 +280,16 @@ export function DiaryView({ today }: { today: DateKey }) {
 function NoteField({ id, note }: { id: string; note: string }) {
   const [v, setV] = useState(note)
   return (
-    <textarea
-      className="input"
-      placeholder="How do you feel? Weight, energy, anything worth remembering…"
-      value={v}
-      onChange={(e) => setV(e.target.value)}
-      onBlur={() => v !== note && updatePhoto(id, { note: v })}
-    />
+    <label className="field">
+      <span>Note</span>
+      <textarea
+        className="input"
+        placeholder="How do you feel? Weight, energy, anything worth remembering…"
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={() => v !== note && updatePhoto(id, { note: v })}
+      />
+    </label>
   )
 }
 
@@ -295,30 +302,42 @@ function SavePhoto({ pending, pose: initialPose, today, onClose }: { pending: { 
     setSaving(true)
     try {
       await savePhoto({ id: uid(), date, pose, note: note.trim(), createdAt: Date.now(), blob: pending.blob })
-      toast('Saved to your diary 📸 Future you will thank you.')
+      toast('Saved to your diary — future you will thank you')
       onClose()
     } catch {
-      toast('Couldn’t save — storage may be full.')
+      toast('Couldn’t save — storage may be full')
       setSaving(false)
     }
   }
   return (
-    <Sheet title="New entry" onClose={onClose}>
-      <div className="stack viewer">
-        <img src={pending.url} alt="Preview" style={{ maxHeight: '45vh', objectFit: 'contain', background: '#000' }} />
-        <div className="chips">
+    <Sheet
+      title="New entry"
+      onClose={onClose}
+      closeLabel="Cancel"
+      actions={
+        <button className="text-btn strong" onClick={save} disabled={saving}>
+          Save
+        </button>
+      }
+    >
+      <div className="stack viewer" style={{ gap: 16 }}>
+        <img src={pending.url} alt="Preview" style={{ maxHeight: '45vh', objectFit: 'contain' }} />
+        <div className="segmented" role="group" aria-label="Pose">
           {POSES.map((p) => (
-            <button key={p.id} className="chip" aria-pressed={pose === p.id} onClick={() => setPose(p.id)}>
+            <button key={p.id} aria-pressed={pose === p.id} onClick={() => setPose(p.id)}>
               {p.label}
             </button>
           ))}
         </div>
         <label className="field">
           <span>Date</span>
-          <input className="input" type="date" value={date} max={todayKey()} onChange={(e) => setDate(e.target.value || today)} />
+          <input className="input mono" type="date" value={date} max={todayKey()} onChange={(e) => setDate(e.target.value || today)} />
         </label>
-        <textarea className="input" placeholder="Note (optional) — mood, weight, energy…" value={note} onChange={(e) => setNote(e.target.value)} />
-        <button className="btn primary block" style={{ minHeight: 52 }} onClick={save} disabled={saving}>
+        <label className="field">
+          <span>Note (optional)</span>
+          <textarea className="input" placeholder="Mood, weight, energy…" value={note} onChange={(e) => setNote(e.target.value)} />
+        </label>
+        <button className="btn primary lg block" onClick={save} disabled={saving}>
           {saving ? 'Saving…' : 'Save to diary'}
         </button>
       </div>

@@ -1,15 +1,16 @@
 import { useEffect, useRef, type ReactNode } from 'react'
-import { IconX } from './Icons'
 
 interface Props {
   title: ReactNode
   onClose: () => void
   children: ReactNode
+  /** Right side of the header (e.g. Save / Edit). */
   actions?: ReactNode
+  closeLabel?: string
 }
 
-/** Bottom sheet: keeps the user in context; dismiss by scrim tap, Esc, or swipe down. */
-export function Sheet({ title, onClose, children, actions }: Props) {
+/** Bottom sheet: keeps the user in context; dismiss by Close, scrim tap, Esc, or swipe down. */
+export function Sheet({ title, onClose, children, actions, closeLabel = 'Close' }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const drag = useRef<{ y: number; dy: number } | null>(null)
 
@@ -25,6 +26,7 @@ export function Sheet({ title, onClose, children, actions }: Props) {
   }, [onClose])
 
   const start = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return
     if ((ref.current?.scrollTop ?? 0) > 0) return
     drag.current = { y: e.clientY, dy: 0 }
   }
@@ -45,14 +47,14 @@ export function Sheet({ title, onClose, children, actions }: Props) {
     <>
       <div className="scrim" onClick={onClose} />
       <div className="sheet" ref={ref} role="dialog" aria-modal="true">
-        <div onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} style={{ touchAction: 'none' }}>
+        <div className="sheet-top" onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
           <div className="grabber" />
           <div className="sheet-head">
-            <h2>{title}</h2>
-            {actions}
-            <button className="icon-btn" onClick={onClose} aria-label="Close">
-              <IconX />
+            <button className="text-btn" onClick={onClose}>
+              {closeLabel}
             </button>
+            <h2>{title}</h2>
+            <div>{actions}</div>
           </div>
         </div>
         {children}

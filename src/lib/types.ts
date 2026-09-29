@@ -8,7 +8,10 @@ export type Kind = 'check' | 'count'
 export interface Habit {
   id: string
   name: string
-  emoji: string
+  /** Line-icon key (see HabitIcon). */
+  icon?: string
+  /** Legacy (v0.1): emoji identity, mapped to an icon on render. */
+  emoji?: string
   color: string
   polarity: Polarity
   kind: Kind

@@ -6,9 +6,10 @@ import { toggleCheck } from '../lib/log'
 import { actions, useStore } from '../lib/store'
 import { toast } from '../lib/toast'
 import type { Habit } from '../lib/types'
-import { HabitDetail } from './HabitDetail'
+import { HabitDetail, scheduleLabel } from './HabitDetail'
+import { HabitIcon } from './HabitIcon'
 import type { Draft } from './HabitForm'
-import { IconCheck, IconLeft, IconRight } from './Icons'
+import { IconLeft, IconRight } from './Icons'
 
 const PPM = 1.2 // pixels per minute → 72px per hour
 const SNAP = 15
@@ -223,23 +224,24 @@ export function CalendarView({ today, onNew }: Props) {
   const cols = `repeat(${span}, 1fr)`
   const selHabit = selected && habits.find((h) => h.id === selected.id)
   const detailHabit = detail && habits.find((h) => h.id === detail.id)
-  const title = fromKey(anchor).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+  const anchorDate = fromKey(anchor)
+  const title = anchorDate.toLocaleDateString(undefined, anchorDate.getFullYear() === fromKey(today).getFullYear() ? { month: 'long' } : { month: 'short', year: 'numeric' })
 
   return (
     <div className="app full">
       <header className="cal-head">
         <h1>{title}</h1>
         {!days.includes(today) && (
-          <button className="btn sm" onClick={() => setAnchor(today)}>
+          <button className="btn ghost sm" onClick={() => setAnchor(today)}>
             Today
           </button>
         )}
-        <div className="segmented" style={{ padding: 3 }}>
-          <button aria-pressed={span === 1} onClick={() => setSpan(1)} style={{ minHeight: 34, padding: '0 10px' }}>
+        <div className="segmented sm">
+          <button aria-pressed={span === 1} onClick={() => setSpan(1)}>
             Day
           </button>
-          <button aria-pressed={span === 3} onClick={() => setSpan(3)} style={{ minHeight: 34, padding: '0 10px' }}>
-            3-day
+          <button aria-pressed={span === 3} onClick={() => setSpan(3)}>
+            3 days
           </button>
         </div>
         <button className="icon-btn" onClick={() => setAnchor(addDays(anchor, -span))} aria-label="Previous">
@@ -259,10 +261,12 @@ export function CalendarView({ today, onNew }: Props) {
         ))}
       </div>
 
-      <div className="allday" style={{ gridTemplateColumns: cols, position: 'relative' }}>
-        <span className="lbl">Any
+      <div className="allday" style={{ gridTemplateColumns: cols }}>
+        <span className="lbl-any">
+          Any
           <br />
-          time</span>
+          time
+        </span>
         {days.map((d) => (
           <div className={`col ${span === 1 ? 'wrap' : ''}`} key={d}>
             {active
@@ -273,10 +277,10 @@ export function CalendarView({ today, onNew }: Props) {
                   <button
                     key={h.id}
                     className={`allday-item ${isSuccess(s) && h.polarity === 'build' ? 'won' : ''}`}
-                    style={{ background: h.color }}
+                    style={{ ['--c' as string]: h.color }}
                     onClick={() => setDetail({ id: h.id, day: d })}
                   >
-                    {h.emoji} {h.name}
+                    {h.name}
                   </button>
                 )
               })}
@@ -285,7 +289,7 @@ export function CalendarView({ today, onNew }: Props) {
       </div>
 
       <div
-        className="cal-scroll"
+        className={`cal-scroll ${selected ? 'has-action' : ''}`}
         ref={scroller}
         style={{ touchAction: 'pan-y' }}
         onPointerDown={(e) => (swipe.current = { x: e.clientX, y: e.clientY })}
@@ -332,22 +336,20 @@ export function CalendarView({ today, onNew }: Props) {
                           height,
                           left: `calc(${(p.col / p.cols) * 100}% + 1px)`,
                           width: `calc(${100 / p.cols}% - 3px)`,
-                          background: h.color,
+                          ['--c' as string]: h.color,
                         }}
                         onPointerDown={(e) => onBlockDown(e, h, d)}
                         role="button"
                         aria-label={`${h.name}, ${minutesToLabel(p.start)}. Tap to select, long-press to move.`}
                       >
-                        <b>
-                          {h.emoji} {h.name}
-                        </b>
+                        <b>{h.name}</b>
                         {height > 36 && (
                           <span className="t">
                             {minutesToLabel(p.start)} – {minutesToLabel(p.start + p.duration)}
                           </span>
                         )}
-                        {won && <IconCheck className="ok-mark" />}
-                        {isSel && <div className="handle" onPointerDown={(e) => onHandleDown(e, h, d)} aria-label="Resize" />}
+                        {isSel && <span className="knob" />}
+                        {isSel && <div className="handle" onPointerDown={(e) => onHandleDown(e, h, d)} aria-label="Drag to resize" />}
                       </div>
                     )
                   })}
@@ -366,21 +368,21 @@ export function CalendarView({ today, onNew }: Props) {
 
       {selHabit && selected && (
         <div className="cal-action" role="toolbar">
-          <span style={{ fontSize: 22 }}>{selHabit.emoji}</span>
+          <HabitIcon habit={selHabit} size={36} />
           <div className="name">
-            {selHabit.name}
-            <div className="small muted">
-              {minutesToLabel(selHabit.start ?? 0)} – {minutesToLabel((selHabit.start ?? 0) + selHabit.duration)} · pull the tab to resize
-            </div>
+            <b>{selHabit.name}</b>
+            <span>
+              {minutesToLabel(selHabit.start ?? 0)} – {minutesToLabel((selHabit.start ?? 0) + selHabit.duration)} · {scheduleLabel(selHabit.days)}
+            </span>
           </div>
+          <button className="btn sm" onClick={() => setDetail(selected)}>
+            Open
+          </button>
           {selHabit.kind === 'check' && selHabit.polarity === 'build' && selected.day <= today && (
             <button className="btn sm primary" onClick={() => toggleCheck(selHabit, selected.day)}>
               {logs[selected.day]?.[selHabit.id]?.v ? 'Undo' : 'Done'}
             </button>
           )}
-          <button className="btn sm" onClick={() => setDetail(selected)}>
-            Open
-          </button>
         </div>
       )}
 

@@ -14,6 +14,8 @@ interface Props {
   pose: Pose
   setPose: (p: Pose) => void
   ghostUrl?: string
+  /** e.g. "15 Sep" — date of the ghost photo. */
+  ghostLabel?: string
   onCapture: (b: Blob) => void
   onClose: () => void
   onUnavailable: () => void
@@ -23,10 +25,10 @@ interface Props {
  * Progress-photo camera: overlays a translucent "ghost" of your last photo in
  * the same pose so framing stays consistent, with a self-timer for hands-free shots.
  */
-export function Camera({ pose, setPose, ghostUrl, onCapture, onClose, onUnavailable }: Props) {
+export function Camera({ pose, setPose, ghostUrl, ghostLabel, onCapture, onClose, onUnavailable }: Props) {
   const video = useRef<HTMLVideoElement>(null)
   const [facing, setFacing] = useState<'user' | 'environment'>('user')
-  const [opacity, setOpacity] = useState(0.35)
+  const [opacity, setOpacity] = useState(0.38)
   const [timer, setTimer] = useState<0 | 3 | 10>(3)
   const [count, setCount] = useState<number | null>(null)
 
@@ -96,46 +98,49 @@ export function Camera({ pose, setPose, ghostUrl, onCapture, onClose, onUnavaila
 
   return (
     <div className="camera">
-      <div className="view" style={{ display: 'grid', placeItems: 'center' }}>
-        <div style={{ position: 'relative', height: '100%', maxWidth: '100%', aspectRatio: '3 / 4' }}>
+      <div className="view">
+        <div className="frame">
           <video ref={video} autoPlay playsInline muted className={facing === 'user' ? 'mirror' : ''} />
           {ghostUrl && opacity > 0 && <img className="ghost" src={ghostUrl} alt="" style={{ opacity }} />}
+          <div className="thirds" />
           {count !== null && <div className="count">{count}</div>}
+          {ghostLabel && count === null && <div className="hint-pill">Line up with your {ghostLabel} photo</div>}
         </div>
         <div className="top">
-          <button className="icon-btn" onClick={onClose} aria-label="Close camera">
+          <button className="round" onClick={onClose} aria-label="Close camera">
             <IconX />
           </button>
-          <div className="row" style={{ gap: 8 }}>
-            <button className="icon-btn" onClick={() => setTimer((t) => (t === 0 ? 3 : t === 3 ? 10 : 0))} aria-label={`Timer ${timer}s`} style={{ width: 'auto', padding: '0 12px', gap: 4, display: 'flex' }}>
-              <IconTimer /> {timer ? `${timer}s` : 'Off'}
-            </button>
-            <button className="icon-btn" onClick={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))} aria-label="Flip camera">
-              <IconFlip />
-            </button>
-          </div>
+          <button className="round" onClick={() => setTimer((t) => (t === 0 ? 3 : t === 3 ? 10 : 0))} aria-label={`Self-timer: ${timer ? `${timer} seconds` : 'off'}`}>
+            <IconTimer />
+            <span className="mono">{timer ? `${timer}s` : 'Off'}</span>
+          </button>
         </div>
       </div>
       <div className="controls">
-        <div className="chips" style={{ justifyContent: 'center' }}>
+        <div className="poses" role="group" aria-label="Pose">
           {POSES.map((p) => (
-            <button key={p.id} className="chip" aria-pressed={pose === p.id} onClick={() => setPose(p.id)}>
+            <button key={p.id} aria-pressed={pose === p.id} onClick={() => setPose(p.id)}>
               {p.label}
             </button>
           ))}
         </div>
         {ghostUrl ? (
-          <label className="row small" style={{ gap: 10 }}>
-            <span style={{ whiteSpace: 'nowrap' }}>Ghost</span>
+          <label className="ghost-ctl">
+            <span>Ghost</span>
             <input type="range" min={0} max={0.8} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} />
+            <span className="mono">{Math.round(opacity * 100)}%</span>
           </label>
         ) : (
-          <p className="small" style={{ textAlign: 'center', opacity: 0.7 }}>
-            First {pose} photo — next time you’ll see it as a guide to line up.
+          <p className="xs" style={{ textAlign: 'center', color: 'rgba(255,255,255,.65)' }}>
+            Your first {pose} photo — next time it appears as a guide to line up with.
           </p>
         )}
-        <div style={{ display: 'grid', placeItems: 'center' }}>
+        <div className="shutter-row">
+          <div className="thumb">{ghostUrl && <img src={ghostUrl} alt="" />}</div>
           <button className="shutter" onClick={shoot} aria-label="Take photo" />
+          <button className="flip" onClick={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))} aria-label="Flip camera">
+            <IconFlip />
+          </button>
         </div>
       </div>
     </div>

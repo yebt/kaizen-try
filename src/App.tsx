@@ -3,7 +3,7 @@ import { CalendarView } from './components/CalendarView'
 import { confetti } from './components/Confetti'
 import { DiaryView } from './components/DiaryView'
 import { HabitForm, type Draft } from './components/HabitForm'
-import { IconCalendar, IconCamera, IconChart, IconPlus, IconToday } from './components/Icons'
+import { IconCalendar, IconCamera, IconChart, IconCheck, IconPlus, IconToday } from './components/Icons'
 import { ProgressView } from './components/ProgressView'
 import { Sheet } from './components/Sheet'
 import { TodayView } from './components/TodayView'
@@ -90,10 +90,8 @@ export default function App() {
           {TABS.map(({ id, label, Icon }, i) => (
             <Fragment key={id}>
               {i === 2 && (
-                <button className="tab add" onClick={() => setDraft({})} aria-label="New habit">
-                  <span>
-                    <IconPlus />
-                  </span>
+                <button className="tab-add" onClick={() => setDraft({})} aria-label="New habit">
+                  <IconPlus />
                 </button>
               )}
               <button className="tab" aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
@@ -105,7 +103,7 @@ export default function App() {
         </nav>
       </div>
 
-      <div className="toasts" aria-live="polite">
+      <div className={`toasts ${tab === 'calendar' ? 'raised' : ''}`} aria-live="polite">
         {toasts.map((t) => (
           <div className="toast" key={t.id}>
             <span style={{ flex: 1 }}>{t.text}</span>
@@ -128,15 +126,17 @@ export default function App() {
       {celebrate && (
         <Sheet title="" onClose={() => setCelebrate(false)}>
           <div className="celebrate">
-            <div className="big">🏆</div>
-            <h2>Perfect day!</h2>
+            <div className="medal">
+              <IconCheck />
+            </div>
+            <h2>A perfect day</h2>
             <p className="muted">
               Every habit handled. {bestStreak > 1 ? `Your longest active streak is ${bestStreak} days.` : 'This is how streaks begin.'}
             </p>
-            <p className="small faint" style={{ margin: '12px 0 20px' }}>
+            <p className="xs faint" style={{ margin: '4px 0 16px' }}>
               +20 XP bonus lands at midnight. Rest well — tomorrow, same small steps.
             </p>
-            <button className="btn primary block" style={{ minHeight: 52 }} onClick={() => setCelebrate(false)}>
+            <button className="btn primary lg block" onClick={() => setCelebrate(false)}>
               Keep going
             </button>
           </div>

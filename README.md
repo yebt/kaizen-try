@@ -36,6 +36,14 @@ A minimal, mobile-first habit tracker PWA. **Small steps, every day.**
   - Photos stay on your device (IndexedDB).
 - Works offline, can be installed as an app, supports dark and light mode, and respects reduced-motion settings.
 
+## Design
+
+The UI is quiet and uses a small set of tokens, all in `src/styles.css`:
+
+- **Colors:** a warm off-white or ink background, and one green accent that is used only to mean "done". Each habit also has its own muted tint.
+- **Fonts:** Instrument Serif for page titles, Geist for the interface and Geist Mono for numbers. The fonts are bundled with the app, so it works fully offline.
+- **Layout:** grouped lists with hairline dividers, line icons, 44 px minimum touch targets, and automatic light and dark mode.
+
 ## Run
 
 ```bash
