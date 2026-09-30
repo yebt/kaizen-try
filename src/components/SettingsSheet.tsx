@@ -5,10 +5,10 @@ import { clearPhotos, countPhotos } from '../lib/photos'
 import { actions, useSettings, useStore } from '../lib/store'
 import { toast } from '../lib/toast'
 import type { Settings } from '../lib/types'
-import { IconUpload } from './Icons'
+import { APP_VERSION } from '../lib/buildInfo'
+import { AboutSheet } from './AboutSheet'
+import { IconRight, IconUpload } from './Icons'
 import { Sheet } from './Sheet'
-
-declare const __APP_VERSION__: string
 
 function Seg<T extends string | number>({ value, options, onChange, label }: { value: T; options: [T, string][]; onChange: (v: T) => void; label: string }) {
   return (
@@ -45,6 +45,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
   const [withPhotos, setWithPhotos] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [incoming, setIncoming] = useState<Backup | null>(null)
+  const [about, setAbout] = useState(false)
   const file = useRef<HTMLInputElement>(null)
   const set = (patch: Partial<Settings>) => actions.updateSettings(patch)
 
@@ -86,6 +87,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
   }
 
   if (incoming) return <ImportSheet backup={incoming} onDone={() => setIncoming(null)} />
+  if (about) return <AboutSheet onClose={() => setAbout(false)} />
 
   return (
     <Sheet title="Profile & settings" onClose={onClose} closeLabel="Done">
@@ -146,11 +148,21 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
           </div>
         </section>
 
+        <div className="list">
+          <button className="about-row" onClick={() => setAbout(true)}>
+            <span>About Kaizen</span>
+            <span className="about-value">
+              <span className="mono">{APP_VERSION}</span>
+              <IconRight width={16} height={16} aria-hidden />
+            </span>
+          </button>
+        </div>
+
         <div className="stack" style={{ gap: 4, alignItems: 'center' }}>
           <button className="btn danger" onClick={eraseAll}>
             Erase all data
           </button>
-          <p className="xs faint">Kaizen {__APP_VERSION__} · no account, no tracking</p>
+          <p className="xs faint">No account, no tracking</p>
         </div>
       </div>
     </Sheet>
