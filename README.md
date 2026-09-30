@@ -40,6 +40,7 @@ A minimal, mobile-first habit tracker PWA. **Small steps, every day.**
   - **Export** saves everything (habits, history, profile and settings) to a `.json` file, with or without photos.
   - **Import** shows what's in the file first, then lets you **Merge** it into your data (the file wins where both have the same entry) or **Replace** your data with it.
   - Files are checked and cleaned before anything is written, and a file from a newer version of the app is refused.
+- **About** (Settings → About Kaizen): version, build commit and date, platform (web or the Android app's version and code), links to what's new, updates, reporting a problem and the source code, a privacy summary, and open-source credits. Tap the version to copy it for a bug report.
 
 ## Design
 
