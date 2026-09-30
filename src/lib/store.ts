@@ -1,12 +1,22 @@
 import { useSyncExternalStore } from 'react'
 import { todayKey, type DateKey } from './date'
-import type { Entry, Habit, Logs } from './types'
+import type { Entry, Habit, Logs, Settings } from './types'
 
 export interface State {
   habits: Habit[]
   logs: Logs
   /** Last day a celebration was shown, so it only fires once. */
   celebrated?: DateKey
+  settings?: Partial<Settings>
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  name: '',
+  theme: 'system',
+  weekStartsOn: 1,
+  haptics: true,
+  celebrations: true,
+  photoReminderDays: 14,
 }
 
 const KEY = 'kaizen:v1'
@@ -36,6 +46,19 @@ function set(next: State) {
 
 export function getState() {
   return state
+}
+
+export function getSettings(): Settings {
+  return { ...DEFAULT_SETTINGS, ...state.settings }
+}
+
+let settingsCache: { src: State['settings']; value: Settings } = { src: undefined, value: DEFAULT_SETTINGS }
+/** Settings with defaults applied; referentially stable between changes. */
+export function useSettings(): Settings {
+  return useStore((s) => {
+    if (s.settings !== settingsCache.src) settingsCache = { src: s.settings, value: { ...DEFAULT_SETTINGS, ...s.settings } }
+    return settingsCache.value
+  })
 }
 
 export function useStore<T>(select: (s: State) => T): T {
@@ -85,6 +108,14 @@ export const actions = {
     if (entry && (entry.v !== 0 || entry.skip)) day[id] = entry
     else delete day[id]
     set({ ...state, logs: { ...state.logs, [date]: day } })
+  },
+
+  updateSettings(patch: Partial<Settings>) {
+    set({ ...state, settings: { ...state.settings, ...patch } })
+  },
+
+  resetAll() {
+    set({ ...empty })
   },
 
   markCelebrated(date: DateKey) {

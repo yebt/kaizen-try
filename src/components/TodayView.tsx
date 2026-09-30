@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { addDays, formatDay, fromKey, startOfWeek, type DateKey } from '../lib/date'
 import { daySummary, isSuccess, levelInfo, progressOf, statusOf, streakOf, totalXp } from '../lib/habits'
-import { useStore } from '../lib/store'
+import { useSettings, useStore } from '../lib/store'
 import type { Habit } from '../lib/types'
 import { HabitCard } from './HabitCard'
 import { HabitDetail } from './HabitDetail'
@@ -16,6 +16,7 @@ interface Props {
   onNew: (d?: Draft) => void
   daysSincePhoto: number | null
   goDiary: () => void
+  onSettings: () => void
 }
 
 function summaryCopy(done: number, total: number, perfect: boolean, future: boolean): [string, string] {
@@ -27,7 +28,7 @@ function summaryCopy(done: number, total: number, perfect: boolean, future: bool
   return [`${done} of ${total} done`, ` — ${left} more for a perfect day`]
 }
 
-export function TodayView({ today, date, setDate, onNew, daysSincePhoto, goDiary }: Props) {
+export function TodayView({ today, date, setDate, onNew, daysSincePhoto, goDiary, onSettings }: Props) {
   const habits = useStore((s) => s.habits)
   const logs = useStore((s) => s.logs)
   const [open, setOpen] = useState<string | null>(null)
@@ -37,7 +38,10 @@ export function TodayView({ today, date, setDate, onNew, daysSincePhoto, goDiary
   const xp = useMemo(() => totalXp(active, logs, today), [active, logs, today])
   const lvl = levelInfo(xp)
   const best = useMemo(() => Math.max(0, ...active.filter((h) => h.polarity === 'build').map((h) => streakOf(h, logs, today).current)), [active, logs, today])
-  const weekStart = startOfWeek(date)
+  const settings = useSettings()
+  const weekStart = startOfWeek(date, settings.weekStartsOn)
+  const remind = settings.photoReminderDays
+  const showPhoto = date === today && remind > 0 && (daysSincePhoto === null || daysSincePhoto >= remind)
   const isToday = date === today
   const d = fromKey(today)
   const freshStart = isToday && (d.getDay() === 1 || d.getDate() === 1)
@@ -71,14 +75,19 @@ export function TodayView({ today, date, setDate, onNew, daysSincePhoto, goDiary
           <div className="eyebrow">{formatDay(date, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
           <h1>{isToday ? 'Today' : date < today ? formatDay(date, { weekday: 'long' }) : 'Upcoming'}</h1>
         </div>
-        {active.length > 0 && (
-          <span className="streak-pill" title={`${xp} XP · longest active streak ${best} days`}>
-            <IconFlame />
-            <span className="mono">{best}</span>
-            <span className="faint">·</span>
-            <span>Lv {lvl.level}</span>
-          </span>
-        )}
+        <div className="row" style={{ gap: 10 }}>
+          {active.length > 0 && (
+            <span className="streak-pill" title={`${xp} XP · longest active streak ${best} days`}>
+              <IconFlame />
+              <span className="mono">{best}</span>
+              <span className="faint">·</span>
+              <span>Lv {lvl.level}</span>
+            </span>
+          )}
+          <button className="avatar" onClick={onSettings} aria-label="Profile and settings">
+            {settings.name.trim()[0]?.toUpperCase() || 'K'}
+          </button>
+        </div>
       </header>
 
       <div>
@@ -170,7 +179,7 @@ export function TodayView({ today, date, setDate, onNew, daysSincePhoto, goDiary
             </div>
           )}
 
-          {(freshStart || (isToday && (daysSincePhoto === null || daysSincePhoto >= 14))) && (
+          {(freshStart || showPhoto) && (
             <div className="list">
               {freshStart && (
                 <div className="notice">
@@ -183,7 +192,7 @@ export function TodayView({ today, date, setDate, onNew, daysSincePhoto, goDiary
                   </div>
                 </div>
               )}
-              {isToday && (daysSincePhoto === null || daysSincePhoto >= 14) && (
+              {showPhoto && (
                 <button className="notice" onClick={goDiary}>
                   <span className="tile" style={{ width: 36, height: 36 }}>
                     <IconCamera width={18} />

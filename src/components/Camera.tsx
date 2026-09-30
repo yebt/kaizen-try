@@ -53,6 +53,12 @@ export function Camera({ pose, setPose, ghostUrl, ghostLabel, onCapture, onClose
     }
   }, [facing, onUnavailable])
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const snap = () => {
     const v = video.current
     if (!v || !v.videoWidth) return

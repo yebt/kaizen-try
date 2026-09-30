@@ -35,6 +35,11 @@ A minimal, mobile-first habit tracker PWA. **Small steps, every day.**
   - A **before/after slider** that compares your first and latest photo, or any two you pick.
   - Photos stay on your device (IndexedDB).
 - Works offline, can be installed as an app, supports dark and light mode, and respects reduced-motion settings.
+- **Profile & settings** (tap the avatar on Today): your name, appearance (System / Light / Dark), which day the week starts on, how often to remind you about progress photos, haptics and celebrations.
+- **Backup & restore** in the same sheet:
+  - **Export** saves everything (habits, history, profile and settings) to a `.json` file, with or without photos.
+  - **Import** shows what's in the file first, then lets you **Merge** it into your data (the file wins where both have the same entry) or **Replace** your data with it.
+  - Files are checked and cleaned before anything is written, and a file from a newer version of the app is refused.
 
 ## Design
 
@@ -54,6 +59,28 @@ npm run build      # static build in dist/ (deploy anywhere)
 ```
 
 Open it on your phone. To install it, use your browser's **Add to Home Screen**. The camera needs HTTPS or `localhost`. Without it, the app falls back to the system photo picker.
+
+## Android app
+
+The Android app wraps the same web app with [Capacitor](https://capacitorjs.com). The app ID is `com.yebt.kaizen`, set in `capacitor.config.ts`.
+
+**Get an APK without installing anything.** Every push to `main` or `feature/**` runs the **Android APK** GitHub Actions workflow. Open the run, download the `kaizen-debug-apk` artifact, unzip it and install `app-debug.apk` on your phone. You need to allow installs from unknown sources.
+
+**Build locally.** You need JDK 21 and the Android SDK (Android Studio installs both).
+
+```bash
+npm run android:sync   # build the web app and copy it into android/
+npm run android:open   # open in Android Studio to run on a device or emulator
+npm run android:apk    # or build a debug APK from the command line
+```
+
+After changing web code, run `npm run android:sync` again. Icons and the splash screen are generated from `assets/` with `npx @capacitor/assets generate --android`.
+
+Differences in the native app:
+- Exports open the Android share sheet, so you can save the file to Files, Drive or email.
+- Haptics use the phone's vibration engine.
+- The back button closes the open sheet or camera first, then returns to Today, and only then leaves the app.
+- The camera asks for permission the first time you take a progress photo.
 
 ## Stack
 

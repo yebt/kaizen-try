@@ -14,7 +14,7 @@ import {
   totalWins,
 } from '../lib/habits'
 import { setSkip } from '../lib/log'
-import { actions } from '../lib/store'
+import { actions, getSettings } from '../lib/store'
 import { toast } from '../lib/toast'
 import type { Habit, Logs } from '../lib/types'
 import { HabitForm } from './HabitForm'
@@ -33,7 +33,7 @@ export function scheduleLabel(days: number[]): string {
 }
 
 export function Heatmap({ habit: h, logs, today, weeks = 20 }: { habit: Habit; logs: Logs; today: DateKey; weeks?: number }) {
-  const start = addDays(startOfWeek(today), -(weeks - 1) * 7)
+  const start = addDays(startOfWeek(today, getSettings().weekStartsOn), -(weeks - 1) * 7)
   const { frozen } = streakOf(h, logs, today)
   const cells = []
   for (let i = 0; i < weeks * 7; i++) {
