@@ -1,0 +1,130 @@
+name: Release
+
+# Push a version tag to publish a GitHub Release with the Android APK:
+#   git tag v0.3.0 && git push origin v0.3.0
+# The tag must match "version" in package.json. Tags with a suffix
+# (v0.3.0-beta.1) are published as pre-releases.
+# A release drafted and published in the GitHub UI also works: the APK is attached to it.
+on:
+  push:
+    tags: ['v*.*.*']
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read version from tag
+        id: version
+        run: |
+          VERSION="${TAG#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag $TAG does not match package.json version $PKG_VERSION. Bump package.json first."
+            exit 1
+          fi
+          CORE="${VERSION%%-*}"
+          IFS=. read -r MAJOR MINOR PATCH <<< "$CORE"
+          # Android needs an increasing integer: 1.2.3 -> 10203.
+          CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          PRERELEASE=false
+          [ "$VERSION" != "$CORE" ] && PRERELEASE=true
+          {
+            echo "name=$VERSION"
+            echo "code=$CODE"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test and typecheck
+        run: |
+          npm test
+          npm run typecheck
+
+      - name: Build web app and sync into Android
+        run: npm run android:sync
+
+      - name: Set up release signing key
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "kind=release" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set; the APK is signed with the shared debug key."
+            echo "kind=debug" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build release APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: >-
+          ./gradlew assembleRelease --no-daemon
+          -PappVersionName=${{ steps.version.outputs.name }}
+          -PappVersionCode=${{ steps.version.outputs.code }}
+
+      - name: Prepare files
+        run: |
+          APK="kaizen-${{ steps.version.outputs.name }}.apk"
+          mv android/app/build/outputs/apk/release/app-release.apk "$APK"
+          sha256sum "$APK" > "$APK.sha256"
+          rm -f "$RUNNER_TEMP/release.keystore"
+          echo "APK=$APK" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNING: ${{ steps.signing.outputs.kind }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          {
+            echo "## Install on Android"
+            echo "Download **$APK** below and open it on your phone (allow installs from this source when asked)."
+            echo "It installs over any earlier Kaizen release, and your data stays."
+            if [ "$SIGNING" = "debug" ]; then
+              echo
+              echo "> Signed with the shared debug key (no release key configured yet)."
+            fi
+          } > notes.md
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Release already exists (e.g. created from the GitHub UI): attach the files.
+            gh release upload "$TAG" "$APK" "$APK.sha256" --clobber
+          else
+            FLAGS=()
+            [ "$PRERELEASE" = "true" ] && FLAGS+=(--prerelease)
+            gh release create "$TAG" "$APK" "$APK.sha256" \
+              --title "Kaizen ${TAG#v}" --notes-file notes.md --generate-notes "${FLAGS[@]}"
+          fi

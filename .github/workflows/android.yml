@@ -43,7 +43,13 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        # Same version code as package.json so it installs over a release of that version.
+        run: |
+          VERSION="$(node -p "require('../package.json').version")"
+          IFS=. read -r MAJOR MINOR PATCH <<< "${VERSION%%-*}"
+          ./gradlew assembleDebug --no-daemon \
+            -PappVersionName="$VERSION-dev+${GITHUB_SHA::7}" \
+            -PappVersionCode=$((MAJOR * 10000 + MINOR * 100 + PATCH))
 
       - uses: actions/upload-artifact@v7
         with:
