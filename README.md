@@ -64,7 +64,43 @@ Open it on your phone. To install it, use your browser's **Add to Home Screen**.
 
 The Android app wraps the same web app with [Capacitor](https://capacitorjs.com). The app ID is `com.yebt.kaizen`, set in `capacitor.config.ts`.
 
-**Get an APK without installing anything.** Every push to `main` or `feature/**` runs the **Android APK** GitHub Actions workflow. Open the run, download the `kaizen-debug-apk` artifact, unzip it and install `app-debug.apk` on your phone. You need to allow installs from unknown sources.
+**Get an APK without installing anything.** Download it from the latest [release](../../releases/latest). For an in-between build, every push to `main` or `feature/**` and every pull request runs the **Android APK** workflow. Open the run and download the `kaizen-debug-apk` artifact. You need to allow installs from unknown sources.
+
+### Releases
+
+Every version tag publishes a **GitHub Release** with an installable APK (`kaizen-X.Y.Z.apk` and its SHA-256 checksum). The **Release** workflow builds it.
+
+1. Bump `"version"` in `package.json` in a pull request, then merge it.
+2. Tag `main` with the same version and push the tag:
+   ```bash
+   git checkout main && git pull
+   git tag v0.3.0 && git push origin v0.3.0
+   ```
+   You can also create the release from the GitHub UI (**Releases → Draft a new release**, with a new tag `v0.3.0`). The workflow then attaches the APK to it.
+
+The workflow checks that the tag matches `package.json` and runs the tests first. A tag with a suffix, such as `v0.3.0-beta.1`, is published as a **pre-release**. The Android version code comes from the version: `1.2.3` becomes `10203`.
+
+**Signing.** Android only installs an update over an existing app if both are signed with the same key.
+
+- **Debug key:** `android/app/debug.keystore` is committed on purpose, so every debug and CI build shares one key and installs over the last one. It protects nothing.
+- **Release key:** releases use it when these repository secrets are set (**Settings → Secrets and variables → Actions**):
+
+  | Secret | Value |
+  |---|---|
+  | `ANDROID_KEYSTORE_BASE64` | the keystore file, base64-encoded |
+  | `ANDROID_KEYSTORE_PASSWORD` | the keystore password |
+  | `ANDROID_KEY_ALIAS` | the key alias, e.g. `kaizen` |
+  | `ANDROID_KEY_PASSWORD` | the key password |
+
+  Create the key once on your own computer and keep a backup somewhere safe. If you lose it, you can never publish an update to the same app again.
+
+  ```bash
+  keytool -genkeypair -v -keystore kaizen-release.jks -alias kaizen \
+    -keyalg RSA -keysize 2048 -validity 10000
+  base64 -w0 kaizen-release.jks   # macOS: base64 -i kaizen-release.jks
+  ```
+
+  Without these secrets, releases are signed with the debug key, and the release notes say so. Moving from a debug-signed install to a release-signed one means uninstalling first, so **export a backup** in Settings before you do.
 
 **Build locally.** You need JDK 21 and the Android SDK (Android Studio installs both).
 
