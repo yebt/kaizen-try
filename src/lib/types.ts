@@ -72,3 +72,18 @@ export interface PhotoMeta {
   note: string
   createdAt: number
 }
+
+export type Theme = 'system' | 'light' | 'dark'
+
+/** Profile and preferences — travel with exports. */
+export interface Settings {
+  name: string
+  theme: Theme
+  /** 0 = Sunday, 1 = Monday. */
+  weekStartsOn: 0 | 1
+  haptics: boolean
+  /** Confetti and the perfect-day sheet. */
+  celebrations: boolean
+  /** Remind to take a progress photo after this many days; 0 = off. */
+  photoReminderDays: number
+}

@@ -1,10 +1,11 @@
 import { prefersReducedMotion } from '../lib/feedback'
+import { getSettings } from '../lib/store'
 
 const COLORS = ['#ff7a45', '#3ccf8e', '#4a90e2', '#f0b429', '#b36bff', '#ff5c8a']
 
 /** Lightweight canvas confetti burst; no-op with reduced motion. */
 export function confetti(pieces = 140) {
-  if (prefersReducedMotion()) return
+  if (prefersReducedMotion() || !getSettings().celebrations) return
   const canvas = document.createElement('canvas')
   canvas.className = 'confetti'
   const dpr = devicePixelRatio || 1

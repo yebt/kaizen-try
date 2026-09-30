@@ -42,6 +42,15 @@ export async function updatePhoto(id: string, patch: Partial<PhotoMeta>) {
   if (cur) await savePhoto({ ...cur, ...patch })
 }
 
+export async function clearPhotos() {
+  await tx('readwrite', (s) => s.clear())
+  notify()
+}
+
+export async function countPhotos(): Promise<number> {
+  return tx<number>('readonly', (s) => s.count())
+}
+
 export async function deletePhoto(id: string) {
   await tx('readwrite', (s) => s.delete(id))
   notify()

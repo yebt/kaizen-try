@@ -1,17 +1,19 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { CalendarView } from './components/CalendarView'
 import { confetti } from './components/Confetti'
 import { DiaryView } from './components/DiaryView'
 import { HabitForm, type Draft } from './components/HabitForm'
 import { IconCalendar, IconCamera, IconChart, IconCheck, IconPlus, IconToday } from './components/Icons'
 import { ProgressView } from './components/ProgressView'
+import { SettingsSheet } from './components/SettingsSheet'
 import { Sheet } from './components/Sheet'
 import { TodayView } from './components/TodayView'
 import { diffDays, todayKey } from './lib/date'
 import { haptic } from './lib/feedback'
 import { daySummary, streakOf } from './lib/habits'
+import { handleBackButton, setSystemBars } from './lib/native'
 import { usePhotos } from './lib/photos'
-import { actions, useStore } from './lib/store'
+import { actions, useSettings, useStore } from './lib/store'
 import { dismiss, useToasts } from './lib/toast'
 
 type Tab = 'today' | 'calendar' | 'progress' | 'diary'
@@ -43,6 +45,8 @@ export default function App() {
   const [date, setDate] = useState(today)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [celebrate, setCelebrate] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settings = useSettings()
   const habits = useStore((s) => s.habits)
   const logs = useStore((s) => s.logs)
   const celebrated = useStore((s) => s.celebrated)
@@ -59,6 +63,26 @@ export default function App() {
 
   useEffect(() => setDate(today), [today])
 
+  // Appearance: follow the OS unless the user picked light or dark.
+  useEffect(() => {
+    const root = document.documentElement
+    if (settings.theme === 'system') delete root.dataset.theme
+    else root.dataset.theme = settings.theme
+    const dark = settings.theme === 'dark' || (settings.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', dark ? '#0e0e10' : '#f6f5f2'))
+    setSystemBars(dark)
+    if (settings.theme !== 'system') return
+    // Keep the bars in sync if the OS switches while the app is open.
+    const mq = matchMedia('(prefers-color-scheme: dark)')
+    const onChange = () => setSystemBars(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [settings.theme])
+
+  const tabRef = useRef(tab)
+  tabRef.current = tab
+  useEffect(() => handleBackButton({ isHome: () => tabRef.current === 'today', goHome: () => setTab('today') }), [])
+
   // Peak moment: the first time today's habits are all handled.
   useEffect(() => {
     const active = habits.filter((h) => !h.archived)
@@ -67,10 +91,12 @@ export default function App() {
     if (s.perfect && anyBuild && celebrated !== today) {
       actions.markCelebrated(today)
       haptic([20, 60, 20, 60, 40])
-      confetti()
-      setCelebrate(true)
+      if (settings.celebrations) {
+        confetti()
+        setCelebrate(true)
+      }
     }
-  }, [habits, logs, today, celebrated])
+  }, [habits, logs, today, celebrated, settings.celebrations])
 
   const lastPhoto = photos?.length ? photos[photos.length - 1].date : null
   const daysSincePhoto = lastPhoto ? diffDays(lastPhoto, today) : photos ? null : 0
@@ -79,7 +105,7 @@ export default function App() {
   return (
     <>
       {tab === 'today' && (
-        <TodayView today={today} date={date} setDate={setDate} onNew={(d) => setDraft(d ?? {})} daysSincePhoto={daysSincePhoto} goDiary={() => setTab('diary')} />
+        <TodayView today={today} date={date} setDate={setDate} onNew={(d) => setDraft(d ?? {})} daysSincePhoto={daysSincePhoto} goDiary={() => setTab('diary')} onSettings={() => setSettingsOpen(true)} />
       )}
       {tab === 'calendar' && <CalendarView today={today} onNew={(d) => setDraft(d ?? {})} />}
       {tab === 'progress' && <ProgressView today={today} />}
@@ -122,6 +148,7 @@ export default function App() {
       </div>
 
       {draft && <HabitForm initial={draft} onClose={() => setDraft(null)} />}
+      {settingsOpen && <SettingsSheet onClose={() => setSettingsOpen(false)} />}
 
       {celebrate && (
         <Sheet title="" onClose={() => setCelebrate(false)}>
@@ -131,7 +158,7 @@ export default function App() {
             </div>
             <h2>A perfect day</h2>
             <p className="muted">
-              Every habit handled. {bestStreak > 1 ? `Your longest active streak is ${bestStreak} days.` : 'This is how streaks begin.'}
+              Every habit handled{settings.name ? `, ${settings.name}` : ''}. {bestStreak > 1 ? `Your longest active streak is ${bestStreak} days.` : 'This is how streaks begin.'}
             </p>
             <p className="xs faint" style={{ margin: '4px 0 16px' }}>
               +20 XP bonus lands at midnight. Rest well — tomorrow, same small steps.

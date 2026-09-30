@@ -25,8 +25,9 @@
   color-scheme: light;
 }
 
+/* Dark tokens: follow the OS unless the user picked a theme in Settings. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #0e0e10;
     --surface: #17171a;
     --ink: #ededef;
@@ -44,6 +45,24 @@
     --tint: 20%;
     color-scheme: dark;
   }
+}
+:root[data-theme='dark'] {
+  --bg: #0e0e10;
+  --surface: #17171a;
+  --ink: #ededef;
+  --ink-2: #a6a6ae;
+  --ink-3: #8c8c95;
+  --line: #27272c;
+  --soft: #1f1f23;
+  --accent: #5cc4a4;
+  --on-accent: #0e0e10;
+  --warn: #e0a63a;
+  --bad: #ff8a80;
+  --shield: #7fa8e6;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --lift: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --tint: 20%;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -178,8 +197,9 @@ textarea.input { padding: 12px 14px; min-height: 76px; resize: vertical; line-he
   background: color-mix(in srgb, var(--c, var(--ink-3)) var(--tint), transparent);
 }
 @media (prefers-color-scheme: dark) {
-  .tile { color: color-mix(in srgb, var(--c, var(--ink-2)) 55%, #fff); }
+  :root:not([data-theme='light']) .tile { color: color-mix(in srgb, var(--c, var(--ink-2)) 55%, #fff); }
 }
+:root[data-theme='dark'] .tile { color: color-mix(in srgb, var(--c, var(--ink-2)) 55%, #fff); }
 
 .stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .stat { padding: 14px 16px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; min-width: 0; }
@@ -223,7 +243,8 @@ textarea.input { padding: 12px 14px; min-height: 76px; resize: vertical; line-he
   animation: toast-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .toast button { color: var(--accent); font-weight: 600; min-height: 36px; padding: 0 10px; border-radius: 8px; }
-@media (prefers-color-scheme: light) { .toast button { color: #7fd3b8; } }
+@media (prefers-color-scheme: light) { :root:not([data-theme='dark']) .toast button { color: #7fd3b8; } }
+:root[data-theme='light'] .toast button { color: #7fd3b8; }
 @keyframes toast-in { from { transform: translateY(10px); opacity: 0; } }
 
 /* ---------- today ---------- */
@@ -339,7 +360,8 @@ textarea.input { padding: 12px 14px; min-height: 76px; resize: vertical; line-he
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   transition: box-shadow 0.15s, opacity 0.2s;
 }
-@media (prefers-color-scheme: dark) { .event, .allday-item { color: color-mix(in srgb, var(--c) 55%, #fff); } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) :is(.event, .allday-item) { color: color-mix(in srgb, var(--c) 55%, #fff); } }
+:root[data-theme='dark'] :is(.event, .allday-item) { color: color-mix(in srgb, var(--c) 55%, #fff); }
 .event b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .event .t { display: block; font-family: var(--mono); font-size: 10px; font-weight: 400; opacity: 0.85; }
 .event.won { opacity: 0.55; }
@@ -431,3 +453,15 @@ textarea.input { padding: 12px 14px; min-height: 76px; resize: vertical; line-he
 .week { touch-action: pan-y; }
 .sr-only:not(:focus) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .sr-only:focus { display: block; margin: 0 auto 8px; min-height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); }
+
+/* ---------- settings ---------- */
+.avatar { width: 44px; height: 44px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--ink); color: var(--bg); font-weight: 600; font-size: 16px; }
+.avatar.lg { width: 56px; height: 56px; font-family: var(--serif); font-weight: 400; font-size: 28px; }
+button.avatar { width: 40px; height: 40px; font-size: 15px; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line); }
+.settings-list .setting { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
+.settings-list .switch.setting { flex-direction: row; min-height: 60px; padding: 8px 14px; }
+.setting b { font-weight: 600; font-size: 15px; }
+.setting .xs { display: block; margin-top: 2px; }
+.btn.danger-fill { background: var(--bad); border-color: var(--bad); color: #fff; }
+/* While a sheet is open, toasts move to the top so they never cover its buttons. */
+body:has(.sheet) .toasts { top: calc(var(--safe-t) + 12px); bottom: auto; }
