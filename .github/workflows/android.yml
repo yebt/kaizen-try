@@ -1,10 +1,11 @@
 name: Android APK
 
-# Builds a debug APK on every push and pull request and attaches it to the run
-# (Actions → the run → Artifacts → kaizen-debug-apk).
+# Builds a debug APK for feature branches and pull requests and attaches it to the
+# run (Actions → the run → Artifacts → kaizen-debug-apk). Merges to main are built
+# by release.yml, which publishes the APK as a GitHub Release.
 on:
   push:
-    branches: [main, 'feature/**']
+    branches: ['feature/**']
   pull_request:
   workflow_dispatch:
 
@@ -18,6 +19,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags give the version (scripts/version.sh)
 
       - uses: actions/setup-node@v7
         with:
@@ -38,18 +41,26 @@ jobs:
           npm test
           npm run typecheck
 
+      - name: Decide the dev version
+        run: |
+          source scripts/version.sh
+          BASE="$(latest_release)"
+          BASE="${BASE:-$(package_version)}"
+          echo "DEV_VERSION=$BASE-dev+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          # Same code as the latest release, so it installs over it.
+          echo "DEV_CODE=$(version_code "$BASE")" >> "$GITHUB_ENV"
+
       - name: Build web app and sync into Android
+        env:
+          APP_VERSION: ${{ env.DEV_VERSION }}
         run: npm run android:sync
 
       - name: Build debug APK
         working-directory: android
-        # Same version code as package.json so it installs over a release of that version.
-        run: |
-          VERSION="$(node -p "require('../package.json').version")"
-          IFS=. read -r MAJOR MINOR PATCH <<< "${VERSION%%-*}"
-          ./gradlew assembleDebug --no-daemon \
-            -PappVersionName="$VERSION-dev+${GITHUB_SHA::7}" \
-            -PappVersionCode=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+        run: >-
+          ./gradlew assembleDebug --no-daemon
+          -PappVersionName="$DEV_VERSION"
+          -PappVersionCode="$DEV_CODE"
 
       - uses: actions/upload-artifact@v7
         with:

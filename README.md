@@ -65,21 +65,31 @@ Open it on your phone. To install it, use your browser's **Add to Home Screen**.
 
 The Android app wraps the same web app with [Capacitor](https://capacitorjs.com). The app ID is `com.yebt.kaizen`, set in `capacitor.config.ts`.
 
-**Get an APK without installing anything.** Download it from the latest [release](../../releases/latest). For an in-between build, every push to `main` or `feature/**` and every pull request runs the **Android APK** workflow. Open the run and download the `kaizen-debug-apk` artifact. You need to allow installs from unknown sources.
+**Get an APK without installing anything.** Download it from the latest [release](../../releases/latest). For a test build before merging, every push to `feature/**` and every pull request runs the **Android APK** workflow. Open the run and download the `kaizen-debug-apk` artifact. You need to allow installs from unknown sources.
 
 ### Releases
 
-Every version tag publishes a **GitHub Release** with an installable APK (`kaizen-X.Y.Z.apk` and its SHA-256 checksum). The **Release** workflow builds it.
+**Every merge to `main` publishes a GitHub Release** with an installable APK (`kaizen-X.Y.Z.apk` and its SHA-256 checksum). The **Release** workflow runs the tests, builds the APK, creates the tag and writes the release notes from the merged pull requests.
 
-1. Bump `"version"` in `package.json` in a pull request, then merge it.
-2. Tag `main` with the same version and push the tag:
-   ```bash
-   git checkout main && git pull
-   git tag v0.3.0 && git push origin v0.3.0
-   ```
-   You can also create the release from the GitHub UI (**Releases → Draft a new release**, with a new tag `v0.3.0`). The workflow then attaches the APK to it.
+The version is the newest `vX.Y.Z` tag plus a bump that you choose with a label on the pull request:
 
-The workflow checks that the tag matches `package.json` and runs the tests first. A tag with a suffix, such as `v0.3.0-beta.1`, is published as a **pre-release**. The Android version code comes from the version: `1.2.3` becomes `10203`.
+| Label on the PR | Bump | Example |
+|---|---|---|
+| *(none)* | patch | `0.2.0 → 0.2.1` |
+| `release:minor` | minor, for new features | `0.2.0 → 0.3.0` |
+| `release:major` | major, for breaking changes | `0.2.0 → 1.0.0` |
+| `release:skip` | no release for this merge | |
+
+- The workflow creates these labels the first time it runs.
+- Changes that only touch docs (`*.md`, `docs/`) never publish a release.
+- Nothing is committed back to `main`: the version lives in the tags, and `scripts/version.sh` computes it. `package.json` only sets the starting point. If you raise its version above the next computed one (for example to `1.0.0` for a launch), that version is used.
+
+You can still release by hand:
+- Push a tag: `git tag v1.2.3 && git push origin v1.2.3`.
+- Draft a release in the GitHub UI with a new tag.
+- Run **Release** from the Actions tab and pick the bump.
+
+A tag with a suffix, such as `v1.3.0-beta.1`, is published as a **pre-release**. The Android version code comes from the version (`1.2.3` becomes `10203`), so minor and patch numbers stay below 100. Test builds of feature branches and pull requests use the latest release's version code, so they install over it.
 
 **Signing.** Android only installs an update over an existing app if both are signed with the same key.
 

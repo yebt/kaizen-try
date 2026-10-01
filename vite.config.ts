@@ -16,7 +16,8 @@ function commit(): string {
 export default defineConfig({
   base: './',
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    // CI sets APP_VERSION from the release tag; locally package.json is used.
+    __APP_VERSION__: JSON.stringify(process.env.APP_VERSION || pkg.version),
     __BUILD_COMMIT__: JSON.stringify(commit()),
     __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
   },
