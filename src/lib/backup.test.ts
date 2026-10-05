@@ -59,3 +59,16 @@ describe('mergeData', () => {
     expect(m.logs['2026-09-30']).toEqual({ b: { v: 1 } })
   })
 })
+
+describe('backups from older versions', () => {
+  it('migrates icon names from format-1 files', () => {
+    const b = parseBackup(file({ format: 1, habits: [habit('a', { icon: 'phone' }), habit('b', { icon: undefined, emoji: '📖' })] }))
+    expect(b.habits.map((h) => h.icon)).toEqual(['smartphone', 'book-open'])
+  })
+
+  it('keeps icon names from current files', () => {
+    const b = parseBackup(file({ habits: [habit('a', { icon: 'phone' })] }))
+    expect(b.habits[0].icon).toBe('phone')
+  })
+})
+

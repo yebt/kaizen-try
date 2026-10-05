@@ -3,7 +3,10 @@ import { inputToMinutes, minutesToInput } from '../lib/date'
 import { actions } from '../lib/store'
 import { toast } from '../lib/toast'
 import type { Habit } from '../lib/types'
-import { Glyph, ICON_KEYS, iconKey } from './HabitIcon'
+import { Glyph } from './HabitIcon'
+import { ICONS } from './icons/catalog'
+import { suggestIcons } from './icons/search'
+import { IconPicker } from './IconPicker'
 import { Sheet } from './Sheet'
 
 /** Muted habit tints — they identify a habit; green stays reserved for "done". */
@@ -16,13 +19,13 @@ export type Draft = Partial<Habit>
 
 /** Smart defaults: common habits pre-filled so a new user never faces a blank form. */
 export const TEMPLATES: Draft[] = [
-  { name: 'Drink water', icon: 'drop', polarity: 'build', kind: 'count', unit: 'glasses', min: 4, goal: 8, color: '#2f7ba3' },
-  { name: 'Read', icon: 'book', polarity: 'build', kind: 'count', unit: 'pages', min: 2, goal: 20, color: '#7457a0', start: 21 * 60 + 30, duration: 30 },
+  { name: 'Drink water', icon: 'droplet', polarity: 'build', kind: 'count', unit: 'glasses', min: 4, goal: 8, color: '#2f7ba3' },
+  { name: 'Read', icon: 'book-open', polarity: 'build', kind: 'count', unit: 'pages', min: 2, goal: 20, color: '#7457a0', start: 21 * 60 + 30, duration: 30 },
   { name: 'Meditate', icon: 'sun', polarity: 'build', kind: 'check', color: '#4c7a55', start: 6 * 60 + 30, duration: 15 },
   { name: 'Workout', icon: 'dumbbell', polarity: 'build', kind: 'count', unit: 'min', min: 10, goal: 45, color: '#b24f33', start: 7 * 60, duration: 45, days: [1, 3, 5] },
-  { name: 'No sugar', icon: 'sugar', polarity: 'quit', kind: 'check', color: '#a04c78' },
-  { name: 'Less phone', icon: 'phone', polarity: 'quit', kind: 'count', unit: 'hours', min: 3, goal: 1, color: '#566a92' },
-  { name: 'Smoking', icon: 'smoke', polarity: 'quit', kind: 'count', unit: 'cigarettes', min: 5, goal: 0, color: '#6b6b73' },
+  { name: 'No sugar', icon: 'candy-off', polarity: 'quit', kind: 'check', color: '#a04c78' },
+  { name: 'Less phone', icon: 'smartphone', polarity: 'quit', kind: 'count', unit: 'hours', min: 3, goal: 1, color: '#566a92' },
+  { name: 'Smoking', icon: 'cigarette-off', polarity: 'quit', kind: 'count', unit: 'cigarettes', min: 5, goal: 0, color: '#6b6b73' },
 ]
 
 interface Props {
@@ -41,10 +44,22 @@ export function HabitForm({ initial = {}, onClose }: Props) {
     start: null,
     duration: 30,
     ...initial,
-    icon: initial.icon ?? (initial.emoji ? iconKey(initial) : 'leaf'),
+    icon: initial.icon ?? 'leaf',
   }))
   const [endMode, setEndMode] = useState(true)
+  const [picker, setPicker] = useState(false)
+  // A new habit's icon follows its name until the user picks one themselves.
+  const [iconChosen, setIconChosen] = useState(Boolean(initial.icon))
   const set = (patch: Draft) => setH((x) => ({ ...x, ...patch }))
+  const chooseIcon = (icon: string) => {
+    setIconChosen(true)
+    set({ icon })
+  }
+  const suggestions = suggestIcons(h.name ?? '', h.polarity ?? 'build', 6)
+  const setName = (name: string) => {
+    const first = suggestIcons(name, h.polarity ?? 'build', 1)[0]
+    set(iconChosen || !name.trim() || !first ? { name } : { name, icon: first.key })
+  }
   const quit = h.polarity === 'quit'
   const timed = h.start !== null && h.start !== undefined
 
@@ -128,18 +143,29 @@ export function HabitForm({ initial = {}, onClose }: Props) {
             <input
               className="input"
               value={h.name}
-              onChange={(e) => set({ name: e.target.value })}
+              onChange={(e) => setName(e.target.value)}
               placeholder={quit ? 'e.g. Social media, sugar' : 'e.g. Read, walk, stretch'}
               autoFocus={!isEdit}
               maxLength={40}
             />
           </label>
-          <div className="icon-grid" role="group" aria-label="Icon" style={{ ['--c' as string]: h.color }}>
-            {ICON_KEYS.map((k) => (
-              <button key={k} aria-pressed={h.icon === k} aria-label={k} onClick={() => set({ icon: k })}>
-                <Glyph name={k} size={19} />
+          <div className="icon-pick" role="group" aria-label="Icon" style={{ ['--c' as string]: h.color }}>
+            <button className="icon-current" onClick={() => setPicker(true)} aria-label={`Icon: ${ICONS[h.icon!]?.label ?? 'Leaf'}. Choose another`}>
+              <Glyph name={h.icon!} size={26} />
+            </button>
+            <div className="icon-suggest">
+              {suggestions
+                .filter((d) => d.key !== h.icon)
+                .slice(0, 5)
+                .map((d) => (
+                  <button key={d.key} onClick={() => chooseIcon(d.key)} aria-label={d.label} title={d.label}>
+                    <Glyph name={d.key} size={19} />
+                  </button>
+                ))}
+              <button className="icon-more" onClick={() => setPicker(true)}>
+                All icons
               </button>
-            ))}
+            </div>
           </div>
           <div className="swatches" role="group" aria-label="Color">
             {COLORS.map((c) => (
@@ -259,6 +285,16 @@ export function HabitForm({ initial = {}, onClose }: Props) {
         </label>
 
         {errors.length > 0 && h.name ? <p className="small" style={{ color: 'var(--bad)' }}>{errors[0]}</p> : null}
+        {picker && (
+          <IconPicker
+            value={h.icon!}
+            color={h.color!}
+            name={h.name ?? ''}
+            polarity={h.polarity ?? 'build'}
+            onSelect={chooseIcon}
+            onClose={() => setPicker(false)}
+          />
+        )}
         <button className="btn primary lg block" onClick={save} disabled={errors.length > 0}>
           {isEdit ? 'Save changes' : 'Create habit'}
         </button>

@@ -1,4 +1,5 @@
 import { todayKey } from './date'
+import { migrateLegacyIcon } from './iconMigration'
 import { clearPhotos, listPhotos, savePhoto } from './photos'
 import { DEFAULT_SETTINGS, getSettings, getState, actions, type State } from './store'
 import type { Entry, Habit, Logs, Photo, Pose, Settings } from './types'
@@ -7,7 +8,8 @@ import type { Entry, Habit, Logs, Photo, Pose, Settings } from './types'
  * Backup file format. Plain JSON so it's portable and human-readable.
  * Bump FORMAT when the shape changes and keep parseBackup able to read older ones.
  */
-export const FORMAT = 1
+// 2: icons are Lucide keys (v0.3). Format-1 files use the old names and are migrated.
+export const FORMAT = 2
 
 export interface BackupPhoto {
   id: string
@@ -86,7 +88,7 @@ function num(v: unknown): number | undefined {
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined
 }
 
-function cleanHabit(raw: unknown, i: number): Habit {
+function cleanHabit(raw: unknown, i: number, format: number): Habit {
   if (!isObj(raw) || typeof raw.id !== 'string' || typeof raw.name !== 'string' || !raw.id || !raw.name.trim())
     throw new BackupError(`Habit #${i + 1} is missing its id or name.`)
   const days = Array.isArray(raw.days) ? raw.days.filter((d): d is number => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6) : []
@@ -94,8 +96,12 @@ function cleanHabit(raw: unknown, i: number): Habit {
   return {
     id: raw.id,
     name: raw.name.trim().slice(0, 60),
-    icon: typeof raw.icon === 'string' ? raw.icon : undefined,
-    emoji: typeof raw.emoji === 'string' ? raw.emoji : undefined,
+    icon:
+      format < 2
+        ? migrateLegacyIcon(typeof raw.icon === 'string' ? raw.icon : undefined, typeof raw.emoji === 'string' ? raw.emoji : undefined)
+        : typeof raw.icon === 'string'
+          ? raw.icon
+          : 'leaf',
     color: typeof raw.color === 'string' && /^#[0-9a-f]{6}$/i.test(raw.color) ? raw.color : '#6b6b73',
     polarity: raw.polarity === 'quit' ? 'quit' : 'build',
     kind: raw.kind === 'count' ? 'count' : 'check',
@@ -168,7 +174,7 @@ export function parseBackup(text: string): Backup {
   const format = num(raw.format)
   if (!format || format > FORMAT) throw new BackupError('This backup was made by a newer version of Kaizen. Update the app and try again.')
   if (!Array.isArray(raw.habits)) throw new BackupError('The backup has no habits list.')
-  const habits = raw.habits.map(cleanHabit)
+  const habits = raw.habits.map((h, i) => cleanHabit(h, i, format))
   const ids = new Set(habits.map((h) => h.id))
   if (ids.size !== habits.length) throw new BackupError('The backup contains duplicate habits.')
   return {

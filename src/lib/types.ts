@@ -10,7 +10,7 @@ export interface Habit {
   name: string
   /** Line-icon key (see HabitIcon). */
   icon?: string
-  /** Legacy (v0.1): emoji identity, mapped to an icon on render. */
+  /** Legacy (v0.1): emoji identity, migrated to `icon` on load (see iconMigration). */
   emoji?: string
   color: string
   polarity: Polarity
