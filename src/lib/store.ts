@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { todayKey, type DateKey } from './date'
+import { migrateLegacyIcon } from './iconMigration'
 import type { Entry, Habit, Logs, Settings } from './types'
 
 export interface State {
@@ -8,6 +9,8 @@ export interface State {
   /** Last day a celebration was shown, so it only fires once. */
   celebrated?: DateKey
   settings?: Partial<Settings>
+  /** Shape of the saved data; 2 = Lucide icon keys (v0.3+). */
+  dataVersion?: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -20,12 +23,27 @@ export const DEFAULT_SETTINGS: Settings = {
 }
 
 const KEY = 'kaizen:v1'
-const empty: State = { habits: [], logs: {} }
+export const DATA_VERSION = 2
+const empty: State = { habits: [], logs: {}, dataVersion: DATA_VERSION }
+
+/** Bring data saved by an older version up to date. Pure, so it's testable. */
+export function migrate(s: State): State {
+  if ((s.dataVersion ?? 1) >= DATA_VERSION) return s
+  return {
+    ...s,
+    habits: s.habits.map(({ emoji, ...h }) => ({ ...h, icon: migrateLegacyIcon(h.icon, emoji) })),
+    dataVersion: DATA_VERSION,
+  }
+}
 
 function load(): State {
   try {
     const raw = localStorage.getItem(KEY)
-    return raw ? { ...empty, ...JSON.parse(raw) } : empty
+    if (!raw) return empty
+    const parsed: State = { habits: [], logs: {}, ...JSON.parse(raw) }
+    const next = migrate(parsed)
+    if (next !== parsed) localStorage.setItem(KEY, JSON.stringify(next))
+    return next
   } catch {
     return empty
   }
@@ -123,6 +141,6 @@ export const actions = {
   },
 
   importState(next: State) {
-    set({ ...empty, ...next })
+    set({ ...empty, ...next, dataVersion: DATA_VERSION })
   },
 }

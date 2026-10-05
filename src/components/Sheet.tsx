@@ -7,23 +7,36 @@ interface Props {
   /** Right side of the header (e.g. Save / Edit). */
   actions?: ReactNode
   closeLabel?: string
+  /** Extra class on the sheet, e.g. "tall" for a near-full-height picker. */
+  className?: string
 }
 
+/** Open sheets, bottom to top: Esc / Android Back closes only the top one. */
+const stack: symbol[] = []
+
 /** Bottom sheet: keeps the user in context; dismiss by Close, scrim tap, Esc, or swipe down. */
-export function Sheet({ title, onClose, children, actions, closeLabel = 'Close' }: Props) {
+export function Sheet({ title, onClose, children, actions, closeLabel = 'Close', className = '' }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const drag = useRef<{ y: number; dy: number } | null>(null)
 
+  const close = useRef(onClose)
+  close.current = onClose
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const id = Symbol('sheet')
+    stack.push(id)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && stack[stack.length - 1] === id) close.current()
+    }
     addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
+      stack.splice(stack.indexOf(id), 1)
       removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
     }
-  }, [onClose])
+  }, [])
 
   const start = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('button')) return
@@ -46,7 +59,7 @@ export function Sheet({ title, onClose, children, actions, closeLabel = 'Close' 
   return (
     <>
       <div className="scrim" onClick={onClose} />
-      <div className="sheet" ref={ref} role="dialog" aria-modal="true">
+      <div className={`sheet ${className}`} ref={ref} role="dialog" aria-modal="true">
         <div className="sheet-top" onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
           <div className="grabber" />
           <div className="sheet-head">

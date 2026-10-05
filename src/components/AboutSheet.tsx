@@ -10,6 +10,7 @@ const CREDITS: [string, string][] = [
   ['React', 'MIT'],
   ['Capacitor', 'MIT'],
   ['Vite', 'MIT'],
+  ['Lucide icons', 'ISC'],
   ['Geist & Geist Mono', 'SIL OFL 1.1'],
   ['Instrument Serif', 'SIL OFL 1.1'],
 ]

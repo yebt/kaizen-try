@@ -34,6 +34,7 @@ A minimal, mobile-first habit tracker PWA. **Small steps, every day.**
   - Pose tags and notes on each photo.
   - A **before/after slider** that compares your first and latest photo, or any two you pick.
   - Photos stay on your device (IndexedDB).
+- **Icons:** about 200 line icons for habits (Lucide), in 12 categories such as health, fitness, food, learning, money and quit & limit. The icon picker has a search box that understands English and Spanish (`agua`, `water`, `gym`, `leer`), a category filter, and suggestions based on the habit's name. A new habit's icon follows its name until you pick one yourself. To add or retag icons, edit `scripts/gen-icon-catalog.py` and run it.
 - Works offline, can be installed as an app, supports dark and light mode, and respects reduced-motion settings.
 - **Profile & settings** (tap the avatar on Today): your name, appearance (System / Light / Dark), which day the week starts on, how often to remind you about progress photos, haptics and celebrations.
 - **Backup & restore** in the same sheet:
