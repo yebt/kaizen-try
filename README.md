@@ -13,12 +13,15 @@ A minimal, mobile-first habit tracker PWA. **Small steps, every day.**
     - a **goal**: a great day
 
     For quit habits these become a **limit** (going over it means a missed day) and a **target** (a full win).
+- **Several times a day.** A "just done" habit can repeat, like brushing your teeth 3 times. The check becomes a ring with one segment per time: each tap logs one more (with Undo), and the day is done when the ring closes. You can also set how many times still count, for example 2 of 3, so a busy day isn't missed. Hold the ring to correct the count.
 - **Calendar like Google Calendar.** Habits can have a start time plus a duration or an end time.
   - Tap an empty slot to create a habit there.
   - **Long-press** a block to drag it.
   - Select a block and pull its tab to **resize** it.
   - Everything snaps to 15 minutes, and every change has an **Undo** toast.
   - There is a red "now" line, a Day or 3-day view, and you can swipe between days.
+  - **Give an any-time habit a time** by holding its chip in the "Any time" row and dragging it onto the timeline, or by selecting it and tapping **Set time**. A confirmation shows what changes (it applies on every day the habit repeats) and lets you fine-tune the start and length.
+  - **Make a timed habit any time again** by dragging its block up onto the "Any time" row, or with **Any time** in its action bar. This is also confirmed and can be undone.
 - **Gamification grounded in research** (see [`docs/RESEARCH.md`](docs/RESEARCH.md)):
   - a daily progress ring
   - forgiving streaks: you earn a **shield** for every 7 wins (at most 2), and it absorbs a miss

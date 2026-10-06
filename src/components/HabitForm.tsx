@@ -4,9 +4,11 @@ import { actions } from '../lib/store'
 import { toast } from '../lib/toast'
 import type { Habit } from '../lib/types'
 import { Glyph } from './HabitIcon'
+import { IconMinus, IconPlus } from './Icons'
 import { ICONS } from './icons/catalog'
 import { suggestIcons } from './icons/search'
 import { IconPicker } from './IconPicker'
+import { NumberInput } from './NumberInput'
 import { Sheet } from './Sheet'
 
 /** Muted habit tints — they identify a habit; green stays reserved for "done". */
@@ -21,12 +23,29 @@ export type Draft = Partial<Habit>
 export const TEMPLATES: Draft[] = [
   { name: 'Drink water', icon: 'droplet', polarity: 'build', kind: 'count', unit: 'glasses', min: 4, goal: 8, color: '#2f7ba3' },
   { name: 'Read', icon: 'book-open', polarity: 'build', kind: 'count', unit: 'pages', min: 2, goal: 20, color: '#7457a0', start: 21 * 60 + 30, duration: 30 },
+  { name: 'Brush teeth', icon: 'toothbrush', polarity: 'build', kind: 'check', goal: 3, min: 2, color: '#3f7f86' },
   { name: 'Meditate', icon: 'sun', polarity: 'build', kind: 'check', color: '#4c7a55', start: 6 * 60 + 30, duration: 15 },
   { name: 'Workout', icon: 'dumbbell', polarity: 'build', kind: 'count', unit: 'min', min: 10, goal: 45, color: '#b24f33', start: 7 * 60, duration: 45, days: [1, 3, 5] },
   { name: 'No sugar', icon: 'candy-off', polarity: 'quit', kind: 'check', color: '#a04c78' },
   { name: 'Less phone', icon: 'smartphone', polarity: 'quit', kind: 'count', unit: 'hours', min: 3, goal: 1, color: '#566a92' },
   { name: 'Smoking', icon: 'cigarette-off', polarity: 'quit', kind: 'count', unit: 'cigarettes', min: 5, goal: 0, color: '#6b6b73' },
 ]
+
+export const MAX_TIMES = 12
+
+function Stepper({ value, min, max, onChange, label }: { value: number; min: number; max: number; onChange: (n: number) => void; label: string }) {
+  return (
+    <div className="stepper" role="group" aria-label={label}>
+      <button type="button" onClick={() => onChange(value - 1)} disabled={value <= min} aria-label={`Fewer — ${label}`}>
+        <IconMinus />
+      </button>
+      <output aria-live="polite">{value}</output>
+      <button type="button" onClick={() => onChange(value + 1)} disabled={value >= max} aria-label={`More — ${label}`}>
+        <IconPlus />
+      </button>
+    </div>
+  )
+}
 
 interface Props {
   initial?: Draft
@@ -61,6 +80,16 @@ export function HabitForm({ initial = {}, onClose }: Props) {
     set(iconChosen || !name.trim() || !first ? { name } : { name, icon: first.key })
   }
   const quit = h.polarity === 'quit'
+  // "Done or not" habits can be done several times a day: goal = times, min = times that still count.
+  const multi = !quit && h.kind === 'check'
+  const times = multi ? Math.max(1, h.goal ?? 1) : 1
+  const timesMin = Math.min(h.min ?? times, times)
+  const setTimesGoal = (n: number) => {
+    const next = Math.max(1, Math.min(MAX_TIMES, n))
+    // Keep "all of them" as the default bar; keep a custom minimum if it still fits.
+    const keepMin = h.min !== undefined && h.min < times && h.min < next
+    set({ goal: next, min: keepMin ? h.min : next })
+  }
   const timed = h.start !== null && h.start !== undefined
 
   const toggleDay = (d: number) => {
@@ -87,8 +116,8 @@ export function HabitForm({ initial = {}, onClose }: Props) {
       name: h.name!.trim(),
       emoji: undefined,
       unit: h.kind === 'count' ? h.unit?.trim() : undefined,
-      min: h.kind === 'count' ? h.min : undefined,
-      goal: h.kind === 'count' ? h.goal : undefined,
+      min: h.kind === 'count' ? h.min : multi && times > 1 ? timesMin : undefined,
+      goal: h.kind === 'count' ? h.goal : multi && times > 1 ? times : undefined,
       start: timed ? h.start! : null,
       duration: Math.max(15, h.duration ?? 30),
       cue: h.cue?.trim() || undefined,
@@ -98,8 +127,8 @@ export function HabitForm({ initial = {}, onClose }: Props) {
     onClose()
   }
 
-  const num = (v: string) => (v === '' ? undefined : Number(v))
-  const switchPolarity = (polarity: 'build' | 'quit') => set({ polarity, ...(h.kind === 'count' && polarity !== h.polarity ? { min: undefined, goal: undefined } : {}) })
+  const switchPolarity = (polarity: 'build' | 'quit') => polarity !== h.polarity && set({ polarity, min: undefined, goal: undefined })
+  const switchKind = (kind: 'check' | 'count') => kind !== h.kind && set({ kind, min: undefined, goal: undefined })
 
   return (
     <Sheet
@@ -119,7 +148,7 @@ export function HabitForm({ initial = {}, onClose }: Props) {
               <button
                 key={t.name}
                 className="chip"
-                onClick={() => setH((x) => ({ ...x, days: [0, 1, 2, 3, 4, 5, 6], start: null, duration: 30, cue: undefined, why: undefined, ...t }))}
+                onClick={() => setH((x) => ({ ...x, days: [0, 1, 2, 3, 4, 5, 6], start: null, duration: 30, cue: undefined, why: undefined, unit: undefined, min: undefined, goal: undefined, ...t }))}
               >
                 <Glyph name={t.icon!} size={15} color={t.color} />
                 {t.name}
@@ -177,17 +206,46 @@ export function HabitForm({ initial = {}, onClose }: Props) {
         <div className="field">
           <span>Tracking</span>
           <div className="segmented">
-            <button aria-pressed={h.kind === 'check'} onClick={() => set({ kind: 'check' })}>
+            <button aria-pressed={h.kind === 'check'} onClick={() => switchKind('check')}>
               {quit ? 'Clean or slipped' : 'Done or not'}
             </button>
-            <button aria-pressed={h.kind === 'count'} onClick={() => set({ kind: 'count' })}>
+            <button aria-pressed={h.kind === 'count'} onClick={() => switchKind('count')}>
               Quantity
             </button>
           </div>
-          {h.kind === 'check' && (
-            <span className="hint">{quit ? 'Every day counts as clean unless you log a slip.' : 'One tap marks the day as done.'}</span>
+          {h.kind === 'check' && quit && (
+            <span className="hint">Every day counts as clean unless you log a slip. For a daily limit — like 2 coffees — choose Quantity.</span>
           )}
         </div>
+
+        {multi && (
+          <div className="panel stack" style={{ gap: 14, padding: '12px 14px' }}>
+            <div className="times-row">
+              <div>
+                <b>Times a day</b>
+                <span>{times === 1 ? 'Once — one tap marks the day done.' : `${times} times — tap once each time.`}</span>
+              </div>
+              <Stepper value={times} min={1} max={MAX_TIMES} onChange={setTimesGoal} label="Times a day" />
+            </div>
+            {times > 1 && (
+              <div className="field" style={{ gap: 8 }}>
+                <span>The day counts from</span>
+                <div className="chips" role="group" aria-label="Minimum times">
+                  {Array.from({ length: times }, (_, i) => i + 1).map((k) => (
+                    <button key={k} type="button" className="chip" aria-pressed={timesMin === k} onClick={() => set({ min: k })}>
+                      {k === times ? `All ${k}` : k}
+                    </button>
+                  ))}
+                </div>
+                <span className="hint">
+                  {timesMin === times
+                    ? `Done after ${times} taps. Pick a lower number to keep your streak on busy days.`
+                    : `Done at ${times}. ${timesMin} ${timesMin === 1 ? 'time' : 'times'} still counts — the day isn’t missed.`}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {h.kind === 'count' && (
           <div className="stack" style={{ gap: 8 }}>
@@ -198,11 +256,11 @@ export function HabitForm({ initial = {}, onClose }: Props) {
               </label>
               <label className="field">
                 <span>{quit ? 'Limit' : 'Minimum'}</span>
-                <input className="input mono" type="number" inputMode="decimal" min={0} value={h.min ?? ''} onChange={(e) => set({ min: num(e.target.value) })} placeholder={quit ? '5' : '2'} />
+                <NumberInput className="input mono" min={0} value={h.min} onChange={(min) => set({ min })} placeholder={quit ? '5' : '2'} />
               </label>
               <label className="field">
                 <span>{quit ? 'Target' : 'Goal'}</span>
-                <input className="input mono" type="number" inputMode="decimal" min={0} value={h.goal ?? ''} onChange={(e) => set({ goal: num(e.target.value) })} placeholder={quit ? '0' : '5'} />
+                <NumberInput className="input mono" min={0} value={h.goal} onChange={(goal) => set({ goal })} placeholder={quit ? '0' : '5'} />
               </label>
             </div>
             <span className="hint">
@@ -258,7 +316,7 @@ export function HabitForm({ initial = {}, onClose }: Props) {
                 ) : (
                   <label className="field">
                     <span>Duration (min)</span>
-                    <input className="input mono" type="number" inputMode="numeric" min={15} step={5} value={h.duration ?? 30} onChange={(e) => set({ duration: Number(e.target.value) || 15 })} />
+                    <NumberInput className="input mono" integer min={15} max={1440} fallback={30} value={h.duration} onChange={(duration) => set({ duration })} placeholder="30" />
                   </label>
                 )}
               </div>

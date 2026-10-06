@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { addDays } from './date'
-import { daysSinceMiss, levelInfo, statusOf, streakOf, totalXp } from './habits'
+import { daysSinceMiss, levelInfo, progressOf, statusOf, streakOf, timesOf, totalXp } from './habits'
 import type { Habit, Logs } from './types'
 
 const T = '2026-03-02' // a Monday
@@ -28,6 +28,23 @@ describe('statusOf', () => {
     expect(statusOf(h, { v: 2 }, T, T)).toBe('pending')
     expect(statusOf(h, { v: 4 }, T, T)).toBe('ok')
     expect(statusOf(h, { v: 9 }, T, T)).toBe('done')
+  })
+
+  it('build check done several times a day: goal = times, min still counts', () => {
+    const h = habit({ goal: 3, min: 2 })
+    expect(timesOf(h)).toBe(3)
+    expect(statusOf(h, { v: 1 }, T, T)).toBe('pending')
+    expect(statusOf(h, { v: 1 }, addDays(T, -1), T)).toBe('missed')
+    expect(statusOf(h, { v: 2 }, addDays(T, -1), T)).toBe('ok')
+    expect(statusOf(h, { v: 3 }, T, T)).toBe('done')
+    expect(progressOf(h, { v: 1 }, T, T)).toBeCloseTo(1 / 3)
+    // Without a minimum, every time is needed.
+    const all = habit({ goal: 3 })
+    expect(statusOf(all, { v: 2 }, addDays(T, -1), T)).toBe('missed')
+    // Plain check habits and quit habits are once a day.
+    expect(timesOf(habit({}))).toBe(1)
+    expect(timesOf(habit({ polarity: 'quit', goal: 3 }))).toBe(1)
+    expect(timesOf(habit({ kind: 'count', goal: 8 }))).toBe(1)
   })
 
   it('quit habits: clean by default, limit and target', () => {

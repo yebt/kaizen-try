@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { addDays, formatDay, fromKey, minutesToLabel, nowMinutes, type DateKey } from '../lib/date'
 import { haptic } from '../lib/feedback'
-import { isScheduled, isSuccess, statusOf } from '../lib/habits'
-import { toggleCheck } from '../lib/log'
+import { ask } from '../lib/confirm'
+import { isScheduled, isSuccess, statusOf, timesOf } from '../lib/habits'
+import { tapCheck } from '../lib/log'
 import { actions, useStore } from '../lib/store'
 import { toast } from '../lib/toast'
 import type { Habit } from '../lib/types'
@@ -10,6 +11,7 @@ import { HabitDetail, scheduleLabel } from './HabitDetail'
 import { HabitIcon } from './HabitIcon'
 import type { Draft } from './HabitForm'
 import { IconLeft, IconRight } from './Icons'
+import { partOfDay, repeatPhrase, ScheduleSheet } from './ScheduleSheet'
 
 const PPM = 1.2 // pixels per minute → 72px per hour
 const SNAP = 15
@@ -53,9 +55,24 @@ export function layoutDay(items: { habit: Habit; start: number; duration: number
   return out
 }
 
+/** Teach the drag gesture a few times, then stay quiet. */
+function placeTip() {
+  try {
+    const n = Number(localStorage.getItem('kaizen:tip-place') ?? 0)
+    if (n >= 3) return
+    localStorage.setItem('kaizen:tip-place', String(n + 1))
+  } catch {
+    return
+  }
+  toast('Tip: hold it and drag onto the calendar to give it a time')
+}
+
 type Gesture =
   | { kind: 'pending'; id: string; day: DateKey; x: number; y: number; timer: number; start: number; duration: number; pointerId: number; target: HTMLElement }
-  | { kind: 'move' | 'resize'; id: string; day: DateKey; y: number; start: number; duration: number; curStart: number; curDuration: number }
+  | { kind: 'move' | 'resize'; id: string; day: DateKey; y: number; start: number; duration: number; curStart: number; curDuration: number; overAny?: boolean }
+  // An "any time" chip: held, then dragged onto the timeline to give it a time.
+  | { kind: 'chip'; id: string; day: DateKey; x: number; y: number; timer: number; pointerId: number; target: HTMLElement }
+  | { kind: 'place'; id: string; duration: number; drop: { day: DateKey; start: number } | null }
   | { kind: 'slot'; day: DateKey; x: number; y: number; moved: boolean }
   | null
 
@@ -73,6 +90,14 @@ export function CalendarView({ today, onNew }: Props) {
   const [detail, setDetail] = useState<{ id: string; day: DateKey } | null>(null)
   const [live, setLive] = useState<{ id: string; start: number; duration: number; kind: 'move' | 'resize' } | null>(null)
   const [ghost, setGhost] = useState<{ day: DateKey; start: number } | null>(null)
+  // Dragging an any-time chip: which chip is lifted and where it would land.
+  const [placing, setPlacing] = useState<{ id: string; drop: { day: DateKey; start: number } | null } | null>(null)
+  // A timed block dragged up over the Any time row.
+  const [overAny, setOverAny] = useState(false)
+  const [scheduling, setScheduling] = useState<{ id: string; day: DateKey; start: number; duration: number } | null>(null)
+  const colsRef = useRef<HTMLDivElement>(null)
+  const alldayRef = useRef<HTMLDivElement>(null)
+  const justPlaced = useRef(false)
   const [now, setNow] = useState(nowMinutes())
   const scroller = useRef<HTMLDivElement>(null)
   const gesture = useRef<Gesture>(null)
@@ -98,12 +123,17 @@ export function CalendarView({ today, onNew }: Props) {
   useEffect(() => {
     const el = scroller.current
     if (!el) return
+    const row = alldayRef.current
     const stop = (e: TouchEvent) => {
       const g = gesture.current
-      if (g && (g.kind === 'move' || g.kind === 'resize')) e.preventDefault()
+      if (g && (g.kind === 'move' || g.kind === 'resize' || g.kind === 'place')) e.preventDefault()
     }
     el.addEventListener('touchmove', stop, { passive: false })
-    return () => el.removeEventListener('touchmove', stop)
+    row?.addEventListener('touchmove', stop, { passive: false })
+    return () => {
+      el.removeEventListener('touchmove', stop)
+      row?.removeEventListener('touchmove', stop)
+    }
   }, [])
 
   const commit = (id: string, patch: Partial<Habit>, before: Partial<Habit>) => {
@@ -112,6 +142,76 @@ export function CalendarView({ today, onNew }: Props) {
     const start = patch.start ?? h?.start ?? 0
     const duration = patch.duration ?? h?.duration ?? 30
     toast(`${h?.name ?? 'Habit'} → ${minutesToLabel(start)}–${minutesToLabel(start + duration)} (every scheduled day)`, () => actions.patchHabit(id, before))
+  }
+
+  const revealTime = (start: number) => {
+    const el = scroller.current
+    if (!el) return
+    const top = start * PPM
+    if (top < el.scrollTop + 24 || top > el.scrollTop + el.clientHeight - 160) el.scrollTo({ top: Math.max(0, top - 96), behavior: 'smooth' })
+  }
+
+  /** Any time → timed, after the user confirms in the sheet. */
+  const schedule = (id: string, day: DateKey, start: number, duration: number) => {
+    const h = habits.find((x) => x.id === id)
+    if (!h) return
+    const before = { start: h.start, duration: h.duration }
+    actions.patchHabit(id, { start, duration })
+    haptic([8, 30, 12])
+    setScheduling(null)
+    setSelected({ id, day })
+    requestAnimationFrame(() => revealTime(start))
+    toast(`${h.name} → ${minutesToLabel(start)} · ${partOfDay(start)}`, () => {
+      actions.patchHabit(id, before)
+      setSelected(null)
+    })
+  }
+
+  /** Timed → any time, behind a confirmation (it changes the habit on every day). */
+  const unschedule = async (h: Habit) => {
+    if (h.start === null) return
+    const ok = await ask({
+      title: `Make “${h.name}” any time?`,
+      body: (
+        <div className="stack" style={{ gap: 14 }}>
+          <div className="change">
+            <span className="from mono">
+              {minutesToLabel(h.start)} – {minutesToLabel((h.start + h.duration) % 1440)}
+            </span>
+            <IconRight aria-hidden />
+            <span className="to" style={{ fontFamily: 'inherit' }}>
+              Any time
+            </span>
+          </div>
+          <span>
+            It leaves the timeline {repeatPhrase(h.days)} and moves to <b>Anytime</b> on Today. History and streak don’t change.
+          </span>
+        </div>
+      ),
+      confirm: 'Move to Any time',
+      cancel: 'Keep the time',
+    })
+    if (!ok) return
+    const before = { start: h.start, duration: h.duration }
+    actions.patchHabit(h.id, { start: null })
+    toast(`${h.name} → Any time`, () => actions.patchHabit(h.id, before))
+  }
+
+  /** Suggested time for "Set time": the next quarter hour today, 9:00 on other days. */
+  const suggestStart = (day: DateKey, duration: number) => {
+    const base = day === today ? Math.ceil((now + 1) / SNAP) * SNAP : 9 * 60
+    return Math.max(0, Math.min(base, 1440 - duration))
+  }
+
+  /** Where a dragged chip would land, or null when the pointer is off the timeline. */
+  const slotAt = (x: number, y: number, duration: number) => {
+    const sc = scroller.current?.getBoundingClientRect()
+    const cols = colsRef.current?.getBoundingClientRect()
+    if (!sc || !cols || y < sc.top || y > sc.bottom || x < sc.left || x > sc.right) return null
+    const i = Math.min(span - 1, Math.max(0, Math.floor((x - cols.left) / (cols.width / span))))
+    // The finger holds the block near its top, like picking up a card.
+    const start = Math.min(Math.max(0, snap((y - cols.top) / PPM - 10)), 1440 - Math.min(duration, 1440))
+    return { day: days[i], start }
   }
 
   const autoScroll = (clientY: number) => {
@@ -150,6 +250,7 @@ export function CalendarView({ today, onNew }: Props) {
   const onPointerMove = (e: React.PointerEvent) => {
     const g = gesture.current
     if (!g) return
+    if (g.kind === 'chip' || g.kind === 'place') return
     if (g.kind === 'pending' || g.kind === 'slot') {
       if (Math.hypot(e.clientX - g.x, e.clientY - g.y) > MOVE_TOLERANCE) {
         if (g.kind === 'pending') {
@@ -162,6 +263,13 @@ export function CalendarView({ today, onNew }: Props) {
     autoScroll(e.clientY)
     const dMin = (e.clientY - g.y) / PPM
     if (g.kind === 'move') {
+      const top = scroller.current?.getBoundingClientRect().top ?? 0
+      const above = e.clientY < top
+      if (above !== !!g.overAny) {
+        g.overAny = above
+        setOverAny(above)
+        if (above) haptic(10)
+      }
       const s = Math.min(Math.max(0, snap(g.start + dMin)), 1440 - Math.max(g.duration, SNAP))
       if (s !== g.curStart) haptic(4)
       g.curStart = s
@@ -180,6 +288,11 @@ export function CalendarView({ today, onNew }: Props) {
     if (g?.kind === 'pending') {
       clearTimeout(g.timer)
       setSelected((s) => (s?.id === g.id && s.day === g.day ? null : { id: g.id, day: g.day }))
+    } else if (g?.kind === 'move' && g.overAny) {
+      setLive(null)
+      setOverAny(false)
+      const h = habits.find((x) => x.id === g.id)
+      if (h) unschedule(h)
     } else if (g?.kind === 'move' || g?.kind === 'resize') {
       setLive(null)
       if (g.curStart !== g.start || g.curDuration !== g.duration)
@@ -210,8 +323,73 @@ export function CalendarView({ today, onNew }: Props) {
     const g = gesture.current
     if (g?.kind === 'pending') clearTimeout(g.timer)
     if (g?.kind === 'move' || g?.kind === 'resize') setLive(null)
+    setOverAny(false)
     gesture.current = null
     swipe.current = null
+  }
+
+  // ---- any-time chips: tap to select, hold and drag onto the timeline -----------
+  const onChipDown = (e: React.PointerEvent, h: Habit, day: DateKey) => {
+    if (e.button !== 0) return
+    justPlaced.current = false // a click may never follow a touch drag
+    const target = e.currentTarget as HTMLElement
+    const timer = window.setTimeout(() => {
+      const g = gesture.current
+      if (g?.kind !== 'chip') return
+      haptic(15)
+      try {
+        g.target.setPointerCapture(g.pointerId)
+      } catch {
+        /* pointer already gone */
+      }
+      const duration = Math.max(SNAP, h.duration || 30)
+      gesture.current = { kind: 'place', id: h.id, duration, drop: null }
+      setSelected(null)
+      setPlacing({ id: h.id, drop: null })
+    }, LONG_PRESS)
+    gesture.current = { kind: 'chip', id: h.id, day, x: e.clientX, y: e.clientY, timer, pointerId: e.pointerId, target }
+  }
+
+  const onChipMove = (e: React.PointerEvent) => {
+    const g = gesture.current
+    if (g?.kind === 'chip') {
+      if (Math.hypot(e.clientX - g.x, e.clientY - g.y) > MOVE_TOLERANCE) {
+        clearTimeout(g.timer)
+        gesture.current = null
+      }
+      return
+    }
+    if (g?.kind !== 'place') return
+    const sc = scroller.current?.getBoundingClientRect()
+    if (sc && e.clientY >= sc.top) autoScroll(e.clientY)
+    const drop = slotAt(e.clientX, e.clientY, g.duration)
+    if (drop?.start !== g.drop?.start || drop?.day !== g.drop?.day) {
+      if (drop) haptic(4)
+      g.drop = drop
+      setPlacing({ id: g.id, drop })
+    }
+  }
+
+  const onChipUp = () => {
+    const g = gesture.current
+    if (g?.kind === 'chip') {
+      clearTimeout(g.timer)
+      gesture.current = null
+      return // a plain tap — handled by onClick
+    }
+    if (g?.kind !== 'place') return
+    gesture.current = null
+    justPlaced.current = true
+    setPlacing(null)
+    if (g.drop) setScheduling({ id: g.id, day: g.drop.day, start: g.drop.start, duration: g.duration })
+    else toast('Drop it on the calendar to give it a time')
+  }
+
+  const onChipCancel = () => {
+    const g = gesture.current
+    if (g?.kind === 'chip') clearTimeout(g.timer)
+    if (g?.kind === 'chip' || g?.kind === 'place') gesture.current = null
+    setPlacing(null)
   }
 
   // Ghost slot disappears once the form closes.
@@ -224,6 +402,8 @@ export function CalendarView({ today, onNew }: Props) {
   const cols = `repeat(${span}, 1fr)`
   const selHabit = selected && habits.find((h) => h.id === selected.id)
   const detailHabit = detail && habits.find((h) => h.id === detail.id)
+  const placingHabit = placing && habits.find((h) => h.id === placing.id)
+  const schedulingHabit = scheduling && habits.find((h) => h.id === scheduling.id)
   const anchorDate = fromKey(anchor)
   const title = anchorDate.toLocaleDateString(undefined, anchorDate.getFullYear() === fromKey(today).getFullYear() ? { month: 'long' } : { month: 'short', year: 'numeric' })
 
@@ -261,7 +441,7 @@ export function CalendarView({ today, onNew }: Props) {
         ))}
       </div>
 
-      <div className="allday" style={{ gridTemplateColumns: cols }}>
+      <div className={`allday ${overAny ? 'drop-any' : ''} ${placing ? 'placing' : ''}`} style={{ gridTemplateColumns: cols }} ref={alldayRef}>
         <span className="lbl-any">
           Any
           <br />
@@ -273,14 +453,28 @@ export function CalendarView({ today, onNew }: Props) {
               .filter((h) => h.start === null && isScheduled(h, d))
               .map((h) => {
                 const s = statusOf(h, logs[d]?.[h.id], d, today)
+                const n = timesOf(h)
+                const v = logs[d]?.[h.id]?.v ?? 0
+                const isSel = selected?.id === h.id && selected.day === d
                 return (
                   <button
                     key={h.id}
-                    className={`allday-item ${isSuccess(s) && h.polarity === 'build' ? 'won' : ''}`}
+                    className={`allday-item ${isSuccess(s) && h.polarity === 'build' ? 'won' : ''} ${isSel ? 'selected' : ''} ${placing?.id === h.id ? 'lifted' : ''}`}
                     style={{ ['--c' as string]: h.color }}
-                    onClick={() => setDetail({ id: h.id, day: d })}
+                    onPointerDown={(e) => onChipDown(e, h, d)}
+                    onPointerMove={onChipMove}
+                    onPointerUp={onChipUp}
+                    onPointerCancel={onChipCancel}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onClick={() => {
+                      if (justPlaced.current) return void (justPlaced.current = false)
+                      setSelected(isSel ? null : { id: h.id, day: d })
+                      if (!isSel) placeTip()
+                    }}
+                    aria-label={`${h.name}, any time. Tap to select, hold and drag onto the calendar to give it a time.`}
                   >
-                    {h.name}
+                    <span className="nm">{h.name}</span>
+                    {n > 1 && d <= today && <span className="n">{Math.min(v, n)}/{n}</span>}
                   </button>
                 )
               })}
@@ -304,7 +498,7 @@ export function CalendarView({ today, onNew }: Props) {
               {h > 0 && <span>{minutesToLabel(h * 60)}</span>}
             </div>
           ))}
-          <div className="cal-cols" style={{ gridTemplateColumns: cols, height: 1440 * PPM }}>
+          <div className="cal-cols" style={{ gridTemplateColumns: cols, height: 1440 * PPM }} ref={colsRef}>
             {days.map((d) => {
               const items = active
                 .filter((h) => h.start !== null && isScheduled(h, d))
@@ -353,6 +547,18 @@ export function CalendarView({ today, onNew }: Props) {
                       </div>
                     )
                   })}
+                  {placing?.drop?.day === d && placingHabit && (
+                    <div
+                      className="event placing"
+                      style={{ top: placing.drop.start * PPM, height: Math.max(placingHabit.duration * PPM, 22), left: 1, width: 'calc(100% - 3px)', ['--c' as string]: placingHabit.color }}
+                      aria-hidden
+                    >
+                      <b>{placingHabit.name}</b>
+                      <span className="t">
+                        {minutesToLabel(placing.drop.start)} – {minutesToLabel(placing.drop.start + placingHabit.duration)}
+                      </span>
+                    </div>
+                  )}
                   {ghost?.day === d && (
                     <div className="ghost-slot" style={{ top: ghost.start * PPM, height: 30 * PPM }}>
                       {minutesToLabel(ghost.start)}
@@ -366,29 +572,61 @@ export function CalendarView({ today, onNew }: Props) {
         </div>
       </div>
 
-      {selHabit && selected && (
-        <div className="cal-action" role="toolbar">
-          <HabitIcon habit={selHabit} size={36} />
-          <div className="name">
-            <b>{selHabit.name}</b>
-            <span>
-              {minutesToLabel(selHabit.start ?? 0)} – {minutesToLabel((selHabit.start ?? 0) + selHabit.duration)} · {scheduleLabel(selHabit.days)}
-            </span>
-          </div>
-          <button className="btn sm" onClick={() => setDetail(selected)}>
-            Open
+      {selHabit && selected && <ActionBar habit={selHabit} day={selected.day} today={today} v={logs[selected.day]?.[selHabit.id]?.v ?? 0} onOpen={() => setDetail(selected)}>
+        {selHabit.start === null ? (
+          <button className="btn sm" onClick={() => setScheduling({ id: selHabit.id, day: selected.day, start: suggestStart(selected.day, selHabit.duration || 30), duration: selHabit.duration || 30 })}>
+            Set time
           </button>
-          {selHabit.kind === 'check' && selHabit.polarity === 'build' && selected.day <= today && (
-            <button className="btn sm primary" onClick={() => toggleCheck(selHabit, selected.day)}>
-              {logs[selected.day]?.[selHabit.id]?.v ? 'Undo' : 'Done'}
-            </button>
-          )}
-        </div>
+        ) : (
+          <button className="btn sm" onClick={() => unschedule(selHabit)}>
+            Any time
+          </button>
+        )}
+      </ActionBar>}
+
+      {schedulingHabit && scheduling && (
+        <ScheduleSheet
+          habit={schedulingHabit}
+          start={scheduling.start}
+          duration={scheduling.duration}
+          onConfirm={(start, duration) => schedule(scheduling.id, scheduling.day, start, duration)}
+          onClose={() => setScheduling(null)}
+        />
       )}
 
       {detailHabit && detail && (
         <HabitDetail habit={detailHabit} logs={logs} date={detail.day} today={today} onClose={() => setDetail(null)} />
       )}
+    </div>
+  )
+}
+
+/** Bottom bar for the selected habit: details, (un)schedule, and log it. */
+function ActionBar({ habit: h, day, today, v, onOpen, children }: { habit: Habit; day: DateKey; today: DateKey; v: number; onOpen: () => void; children: ReactNode }) {
+  const n = timesOf(h)
+  const canLog = h.kind === 'check' && h.polarity === 'build' && day <= today
+  const when = h.start === null ? `Any time · ${scheduleLabel(h.days)}` : `${minutesToLabel(h.start)} – ${minutesToLabel(h.start + h.duration)} · ${scheduleLabel(h.days)}`
+  return (
+    <div className="cal-action" role="toolbar" aria-label={h.name}>
+      <button className="name" onClick={onOpen} aria-label={`${h.name} — details`}>
+        <HabitIcon habit={h} size={36} />
+        <span className="txt">
+          <b>{h.name}</b>
+          <span>{when}</span>
+        </span>
+        <IconRight className="chev" aria-hidden />
+      </button>
+      {children}
+      {canLog &&
+        (n > 1 ? (
+          <button className="btn sm primary" onClick={() => tapCheck(h, day)} disabled={v >= n}>
+            {v >= n ? `${n}/${n} ✓` : `+1 · ${v}/${n}`}
+          </button>
+        ) : (
+          <button className="btn sm primary" onClick={() => tapCheck(h, day)}>
+            {v ? 'Undo' : 'Done'}
+          </button>
+        ))}
     </div>
   )
 }

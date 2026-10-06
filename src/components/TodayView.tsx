@@ -146,7 +146,7 @@ export function TodayView({ today, date, setDate, onNew, daysSincePhoto, goDiary
                 <div style={{ flex: 1 }}>
                   <div className="name">{t.name}</div>
                   <div className="meta">
-                    {t.polarity === 'quit' ? 'Leave' : 'Build'} · {t.kind === 'count' ? `goal ${t.goal} ${t.unit}` : 'check off daily'}
+                    {t.polarity === 'quit' ? 'Leave' : 'Build'} · {t.kind === 'count' ? `goal ${t.goal} ${t.unit}` : t.goal ? `${t.goal} times a day` : 'check off daily'}
                   </div>
                 </div>
                 <IconRight width={18} className="faint" />

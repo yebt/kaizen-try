@@ -18,15 +18,17 @@ export interface Habit {
   /** Count habits only. */
   unit?: string
   /**
-   * Count habits only.
+   * Count habits:
    * build: minimum quantity so the day is not missed.
    * quit: the limit — going above it means the day is missed.
+   * Build check habits done several times a day: how many times still count.
    */
   min?: number
   /**
-   * Count habits only.
+   * Count habits:
    * build: target quantity (full completion).
    * quit: target ceiling (full success, e.g. 0).
+   * Build check habits: times a day (unset = once). See `timesOf`.
    */
   goal?: number
   /** Scheduled weekdays, 0 = Sunday. */

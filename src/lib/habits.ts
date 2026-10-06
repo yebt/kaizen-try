@@ -12,6 +12,11 @@ export type Status =
 
 export const isSuccess = (s: Status) => s === 'done' || s === 'ok'
 
+/** Times a day for a build "done or not" habit — 1 is the classic single tap. */
+export function timesOf(h: Habit): number {
+  return h.kind === 'check' && h.polarity === 'build' ? Math.max(1, Math.round(h.goal ?? 1)) : 1
+}
+
 export function isScheduled(h: Habit, date: DateKey): boolean {
   return date >= h.createdAt && h.days.includes(weekday(date))
 }
@@ -43,7 +48,8 @@ export function statusOf(h: Habit, e: Entry | undefined, date: DateKey, today: D
     return 'missed'
   }
 
-  if (h.kind === 'check') return v >= 1 ? 'done' : past ? 'missed' : 'pending'
+  if (h.kind === 'check' && timesOf(h) === 1) return v >= 1 ? 'done' : past ? 'missed' : 'pending'
+  // Quantity, or "done" several times a day (goal = times, min = times that still count).
   const { min, goal } = thresholds(h)
   if (v >= goal) return 'done'
   if (v >= min) return 'ok'
@@ -57,7 +63,6 @@ export function progressOf(h: Habit, e: Entry | undefined, date: DateKey, today:
   if (s === 'missed' || s === 'none' || s === 'future') return 0
   if (s === 'skipped') return 1
   if (h.polarity === 'quit') return s === 'ok' ? 0.6 : 0
-  if (h.kind === 'check') return 0
   return Math.min((e?.v ?? 0) / thresholds(h).goal, 1)
 }
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ask } from '../lib/confirm'
 import { diffDays, formatDay, todayKey, type DateKey } from '../lib/date'
 import { compress, deletePhoto, savePhoto, updatePhoto, usePhotos, type PhotoView } from '../lib/photos'
 import { uid } from '../lib/store'
@@ -262,7 +263,7 @@ export function DiaryView({ today }: { today: DateKey }) {
             <button
               className="btn danger block"
               onClick={async () => {
-                if (!confirm('Delete this photo? This can’t be undone.')) return
+                if (!(await ask({ title: 'Delete this photo?', body: 'It will be removed from your diary. This can’t be undone.', confirm: 'Delete photo', danger: true }))) return
                 await deletePhoto(viewingPhoto.id)
                 setViewing(null)
                 toast('Photo deleted')

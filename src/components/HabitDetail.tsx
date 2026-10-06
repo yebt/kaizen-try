@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ask } from '../lib/confirm'
 import { addDays, formatDay, minutesToLabel, startOfWeek, type DateKey } from '../lib/date'
 import {
   completionRate,
@@ -10,6 +11,7 @@ import {
   streakOf,
   strengthOf,
   thresholds,
+  timesOf,
   totalIn,
   totalWins,
 } from '../lib/habits'
@@ -74,11 +76,18 @@ export function HabitDetail({ habit: h, logs, date, today, onClose }: Props) {
   const next = nextMilestone(current)
   const status = statusOf(h, logs[date]?.[h.id], date, today)
   const { min, goal } = thresholds(h)
+  const times = timesOf(h)
 
   if (editing) return <HabitForm initial={h} onClose={() => setEditing(false)} />
 
-  const remove = () => {
-    if (!confirm(`Delete “${h.name}” and all its history? This can’t be undone.`)) return
+  const remove = async () => {
+    const ok = await ask({
+      title: `Delete “${h.name}”?`,
+      body: 'Its whole history goes with it, and this can’t be undone. To take a break instead, mark rest days.',
+      confirm: 'Delete habit',
+      danger: true,
+    })
+    if (!ok) return
     actions.deleteHabit(h.id)
     toast('Habit deleted')
     onClose()
@@ -91,7 +100,7 @@ export function HabitDetail({ habit: h, logs, date, today, onClose }: Props) {
 
   const subtitle = [
     scheduleLabel(h.days),
-    h.kind === 'count' ? (quit ? `limit ${formatQty(min)} · aim ≤ ${formatQty(goal)} ${h.unit}` : `minimum ${formatQty(min)} · goal ${formatQty(goal)} ${h.unit}`) : quit ? 'stay clean' : null,
+    h.kind === 'count' ? (quit ? `limit ${formatQty(min)} · aim ≤ ${formatQty(goal)} ${h.unit}` : `minimum ${formatQty(min)} · goal ${formatQty(goal)} ${h.unit}`) : quit ? 'stay clean' : times > 1 ? `${times} times a day${min < times ? ` · ${min} counts` : ''}` : null,
     h.start !== null ? `${minutesToLabel(h.start)}–${minutesToLabel(h.start + h.duration)}` : null,
   ]
     .filter(Boolean)
@@ -157,7 +166,7 @@ export function HabitDetail({ habit: h, logs, date, today, onClose }: Props) {
                 <i style={{ background: h.color }} />
                 {quit ? 'clean' : 'goal'}
               </span>
-              {h.kind === 'count' && (
+              {(h.kind === 'count' || min < times) && (
                 <span>
                   <i style={{ background: h.color, opacity: 0.5 }} />
                   {quit ? 'under limit' : 'minimum'}
