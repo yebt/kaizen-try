@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 interface Props {
   title: ReactNode
@@ -19,6 +19,9 @@ export function Sheet({ title, onClose, children, actions, closeLabel = 'Close',
   const ref = useRef<HTMLDivElement>(null)
   const drag = useRef<{ y: number; dy: number } | null>(null)
 
+  // Each sheet stacks above the ones under it, scrim included, so a dialog
+  // opened from a sheet dims that sheet too.
+  const [depth] = useState(() => stack.length)
   const close = useRef(onClose)
   close.current = onClose
 
@@ -58,8 +61,8 @@ export function Sheet({ title, onClose, children, actions, closeLabel = 'Close',
 
   return (
     <>
-      <div className="scrim" onClick={onClose} />
-      <div className={`sheet ${className}`} ref={ref} role="dialog" aria-modal="true">
+      <div className="scrim" onClick={onClose} style={{ zIndex: 50 + depth * 2 }} />
+      <div className={`sheet ${className}`} ref={ref} role="dialog" aria-modal="true" style={{ zIndex: 51 + depth * 2 }}>
         <div className="sheet-top" onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
           <div className="grabber" />
           <div className="sheet-head">

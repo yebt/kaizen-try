@@ -12,6 +12,25 @@ export type Status =
 
 export const isSuccess = (s: Status) => s === 'done' || s === 'ok'
 
+/** Times a day for a build "done or not" habit — 1 is the classic single tap. */
+export function timesOf(h: Habit): number {
+  return h.kind === 'check' && h.polarity === 'build' ? Math.max(1, Math.round(h.goal ?? 1)) : 1
+}
+
+/** Start of each calendar block: one per time when the habit has its own slots. */
+export function blocksOf(h: Habit): number[] {
+  if (h.start === null) return []
+  const n = timesOf(h)
+  return n > 1 && h.slots?.length === n ? h.slots : [h.start]
+}
+
+/** Spread N times through the day from `first` (e.g. 8:00 · 14:30 · 21:00), on 15-minute steps. */
+export function spreadSlots(n: number, first: number, duration = 15): number[] {
+  const last = Math.max(first, Math.min(21 * 60, 1440 - duration))
+  const step = n > 1 ? Math.max(15, Math.floor((last - first) / (n - 1) / 15) * 15) : 0
+  return Array.from({ length: n }, (_, i) => Math.min(first + i * step, 1440 - duration))
+}
+
 export function isScheduled(h: Habit, date: DateKey): boolean {
   return date >= h.createdAt && h.days.includes(weekday(date))
 }
@@ -43,7 +62,8 @@ export function statusOf(h: Habit, e: Entry | undefined, date: DateKey, today: D
     return 'missed'
   }
 
-  if (h.kind === 'check') return v >= 1 ? 'done' : past ? 'missed' : 'pending'
+  if (h.kind === 'check' && timesOf(h) === 1) return v >= 1 ? 'done' : past ? 'missed' : 'pending'
+  // Quantity, or "done" several times a day (goal = times, min = times that still count).
   const { min, goal } = thresholds(h)
   if (v >= goal) return 'done'
   if (v >= min) return 'ok'
@@ -57,7 +77,6 @@ export function progressOf(h: Habit, e: Entry | undefined, date: DateKey, today:
   if (s === 'missed' || s === 'none' || s === 'future') return 0
   if (s === 'skipped') return 1
   if (h.polarity === 'quit') return s === 'ok' ? 0.6 : 0
-  if (h.kind === 'check') return 0
   return Math.min((e?.v ?? 0) / thresholds(h).goal, 1)
 }
 

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { minutesToLabel, type DateKey } from '../lib/date'
-import { daysSinceMiss, formatQty, statusOf, streakOf, thresholds } from '../lib/habits'
-import { addQty, stepOf, toggleCheck, writeEntry } from '../lib/log'
+import { blocksOf, daysSinceMiss, formatQty, statusOf, streakOf, thresholds, timesOf } from '../lib/habits'
+import { addQty, setTimes, stepOf, tapCheck, toggleCheck, writeEntry } from '../lib/log'
 import type { Habit, Logs } from '../lib/types'
 import { HabitIcon } from './HabitIcon'
 import { IconCheck, IconMinus, IconPlus } from './Icons'
@@ -27,12 +27,15 @@ export function HabitCard({ habit: h, logs, date, today, onOpen }: Props) {
   const v = entry?.v ?? 0
   const [exact, setExact] = useState(false)
   const { min, goal } = thresholds(h)
+  const times = timesOf(h)
   const quit = h.polarity === 'quit'
   const won = status === 'done' && !quit
   const future = status === 'future'
 
   // One context line — the most useful thing to know right now.
-  const time = h.start !== null ? minutesToLabel(h.start) : null
+  const blocks = blocksOf(h)
+  // With a time for each, point at the next one still to do.
+  const time = blocks.length > 1 ? (v < blocks.length ? `next ${minutesToLabel(blocks[v])}` : null) : h.start !== null ? minutesToLabel(h.start) : null
   let meta: string
   let warn = false
   if (status === 'skipped') meta = 'Rest day — streak is safe'
@@ -48,6 +51,9 @@ export function HabitCard({ habit: h, logs, date, today, onOpen }: Props) {
     meta = [time, `${formatQty(v)} of ${formatQty(goal)} ${h.unit}`, status === 'ok' ? 'minimum met' : !time && status !== 'done' ? `min ${formatQty(min)}` : null]
       .filter(Boolean)
       .join(' · ')
+  } else if (times > 1) {
+    const counted = status === 'ok' ? 'counts for today' : status === 'done' ? (streak.current ? `${streak.current}-day streak` : null) : min < times && !time ? `${min} still counts` : null
+    meta = [time, `${v} of ${times} times`, counted].filter(Boolean).join(' · ')
   } else {
     meta = [time, streak.current ? `${streak.current}-day streak` : 'Start your streak today'].filter(Boolean).join(' · ')
   }
@@ -71,7 +77,17 @@ export function HabitCard({ habit: h, logs, date, today, onOpen }: Props) {
         </div>
       </button>
 
-      {future ? null : h.kind === 'check' && !quit ? (
+      {future ? null : times > 1 ? (
+        <TimesButton
+          habit={h}
+          value={v}
+          rest={status === 'skipped'}
+          onTap={() => {
+            if (!tapCheck(h, date)) setExact(true)
+          }}
+          onLongPress={() => setExact(true)}
+        />
+      ) : h.kind === 'check' && !quit ? (
         <button
           className={`check ${v ? 'on' : ''} ${status === 'skipped' ? 'rest' : ''}`}
           onClick={() => toggleCheck(h, date)}
@@ -110,7 +126,8 @@ export function HabitCard({ habit: h, logs, date, today, onOpen }: Props) {
         </div>
       )}
 
-      {exact && <ExactEntry habit={h} value={v} onClose={() => setExact(false)} onSave={(n) => writeEntry(h, date, n ? { v: n } : null)} />}
+      {exact && times > 1 && <TimesEntry habit={h} value={v} onClose={() => setExact(false)} onSave={(n) => setTimes(h, date, n)} />}
+      {exact && times === 1 && <ExactEntry habit={h} value={v} onClose={() => setExact(false)} onSave={(n) => writeEntry(h, date, n ? { v: n } : null)} />}
     </div>
   )
 }
@@ -171,6 +188,119 @@ function ExactEntry({ habit: h, value, onClose, onSave }: { habit: Habit; value:
         </div>
         <button className="btn primary lg block">Save</button>
       </form>
+    </Sheet>
+  )
+}
+
+/** Ring split into one arc per time; fills as you go, turns green when complete. */
+export function TimesRing({ times, value, min, size = 32 }: { times: number; value: number; min: number; size?: number }) {
+  const r = size / 2 - 2.5
+  const c = 2 * Math.PI * r
+  const gap = times > 8 ? 2.5 : 4
+  const seg = c / times - gap
+  const done = value >= times
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden className={`times-ring ${done ? 'full' : ''}`}>
+      <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+        {Array.from({ length: times }, (_, i) => (
+          <circle
+            key={i}
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            className={i < value ? 'on' : i === min - 1 && min < times ? 'min' : ''}
+            strokeDasharray={`${seg} ${c - seg}`}
+            strokeDashoffset={-(i * (seg + gap)) - gap / 2}
+          />
+        ))}
+      </g>
+    </svg>
+  )
+}
+
+function TimesButton({ habit: h, value, rest, onTap, onLongPress }: { habit: Habit; value: number; rest: boolean; onTap: () => void; onLongPress: () => void }) {
+  const n = timesOf(h)
+  const { min } = thresholds(h)
+  const done = value >= n
+  const timer = useRef(0)
+  const held = useRef(false)
+  const cancel = () => clearTimeout(timer.current)
+  return (
+    <button
+      className={`check times ${done ? 'on' : ''} ${rest ? 'rest' : ''}`}
+      onPointerDown={() => {
+        held.current = false
+        timer.current = window.setTimeout(() => {
+          held.current = true
+          onLongPress()
+        }, 450)
+      }}
+      onPointerUp={cancel}
+      onPointerLeave={cancel}
+      onPointerCancel={cancel}
+      onContextMenu={(e) => e.preventDefault()}
+      onClick={() => {
+        if (!held.current) onTap()
+        held.current = false
+      }}
+      aria-label={done ? `${h.name}: all ${n} done. Edit` : `${h.name}: ${value} of ${n}. Log one more`}
+    >
+      <TimesRing times={n} value={value} min={min} />
+      <span className="times-core">{done ? <IconCheck /> : <b>{value}</b>}</span>
+    </button>
+  )
+}
+
+/** Adjust a multi-times day: tap a pip to set the count, or step with − / +. */
+function TimesEntry({ habit: h, value, onClose, onSave }: { habit: Habit; value: number; onClose: () => void; onSave: (n: number) => void }) {
+  const n = timesOf(h)
+  const { min } = thresholds(h)
+  const [v, setV] = useState(Math.min(value, n))
+  const commit = (x: number) => {
+    onSave(x)
+    onClose()
+  }
+  const label = v >= n ? 'All done' : v >= min ? 'Counts for today' : v === 0 ? 'Not yet' : `${min - v} more to count`
+  return (
+    <Sheet title={h.name} onClose={onClose} closeLabel="Cancel" actions={<button className="text-btn strong" onClick={() => commit(v)}>Save</button>}>
+      <div className="stack" style={{ gap: 22, alignItems: 'center', textAlign: 'center' }}>
+        <div className="times-big" style={{ ['--c' as string]: h.color }}>
+          <TimesRing times={n} value={v} min={min} size={132} />
+          <div className="times-big-core">
+            <b className="mono">
+              {v}
+              <small>/{n}</small>
+            </b>
+            <span className={v >= min ? 'ok' : ''}>{label}</span>
+          </div>
+        </div>
+        <div className="pips" role="group" aria-label="Times done today">
+          {Array.from({ length: n }, (_, i) => (
+            <button
+              key={i}
+              className={`pip ${i < v ? 'on' : ''} ${i === min - 1 && min < n ? 'min' : ''}`}
+              onClick={() => setV(i + 1 === v ? i : i + 1)}
+              aria-pressed={i < v}
+              aria-label={`${i + 1} ${i ? 'times' : 'time'}`}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+        <div className="row" style={{ gap: 10, width: '100%' }}>
+          <button className="btn lg" style={{ flex: 1 }} onClick={() => setV(Math.max(0, v - 1))} disabled={v === 0}>
+            <IconMinus width={18} /> One less
+          </button>
+          <button className="btn lg" style={{ flex: 1 }} onClick={() => setV(Math.min(n, v + 1))} disabled={v >= n}>
+            <IconPlus width={18} /> One more
+          </button>
+        </div>
+        {min < n && <p className="xs muted">The marked pip is your minimum — reach it and the day counts.</p>}
+        <button className="btn primary lg block" onClick={() => commit(v)}>
+          Save
+        </button>
+      </div>
     </Sheet>
   )
 }

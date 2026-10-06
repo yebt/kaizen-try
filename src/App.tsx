@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { CalendarView } from './components/CalendarView'
 import { confetti } from './components/Confetti'
+import { ConfirmHost } from './components/ConfirmHost'
 import { DiaryView } from './components/DiaryView'
 import { HabitForm, type Draft } from './components/HabitForm'
 import { IconCalendar, IconCamera, IconChart, IconCheck, IconPlus, IconToday } from './components/Icons'
@@ -169,6 +170,7 @@ export default function App() {
           </div>
         </Sheet>
       )}
+      <ConfirmHost />
     </>
   )
 }

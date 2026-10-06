@@ -110,6 +110,7 @@ function cleanHabit(raw: unknown, i: number, format: number): Habit {
     goal: num(raw.goal),
     days: days.length ? days : [0, 1, 2, 3, 4, 5, 6],
     start: start !== undefined && start >= 0 && start < 1440 ? start : null,
+    slots: cleanSlots(raw.slots),
     duration: Math.max(15, num(raw.duration) ?? 30),
     why: typeof raw.why === 'string' ? raw.why : undefined,
     cue: typeof raw.cue === 'string' ? raw.cue : undefined,
@@ -117,6 +118,12 @@ function cleanHabit(raw: unknown, i: number, format: number): Habit {
     archived: raw.archived === true || undefined,
     order: num(raw.order) ?? i,
   }
+}
+
+function cleanSlots(raw: unknown): number[] | undefined {
+  if (!Array.isArray(raw) || raw.length < 2) return undefined
+  const out = raw.map(num).filter((n): n is number => n !== undefined && n >= 0 && n < 1440)
+  return out.length === raw.length ? out.sort((a, b) => a - b) : undefined
 }
 
 function cleanLogs(raw: unknown, ids: Set<string>): Logs {

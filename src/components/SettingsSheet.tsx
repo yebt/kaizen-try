@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ask } from '../lib/confirm'
 import { applyBackup, backupFileName, BackupError, createBackup, parseBackup, summarize, type Backup, type ImportMode } from '../lib/backup'
 import { saveTextFile } from '../lib/files'
 import { clearPhotos, countPhotos } from '../lib/photos'
@@ -78,8 +79,13 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
   }
 
   const eraseAll = async () => {
-    if (!confirm('Erase all habits, history, photos and settings on this device? Export a backup first if you might want them back.')) return
-    if (!confirm('This can’t be undone. Erase everything?')) return
+    const ok = await ask({
+      title: 'Erase everything?',
+      body: 'All habits, history, photos and settings on this device will be deleted. This can’t be undone — export a backup first if you might want them back.',
+      confirm: 'Erase everything',
+      danger: true,
+    })
+    if (!ok) return
     actions.resetAll()
     await clearPhotos()
     toast('All data erased')
@@ -178,7 +184,16 @@ function ImportSheet({ backup, onDone }: { backup: Backup; onDone: () => void })
   const when = s.exportedAt ? new Date(s.exportedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown date'
 
   const run = async () => {
-    if (mode === 'replace' && !confirm('Replace everything on this device with this backup? Current habits and history will be removed.')) return
+    if (
+      mode === 'replace' &&
+      !(await ask({
+        title: 'Replace your data?',
+        body: 'Everything on this device will be replaced with this backup. Your current habits and history will be removed.',
+        confirm: 'Replace',
+        danger: true,
+      }))
+    )
+      return
     setBusy(true)
     try {
       await applyBackup(backup, { mode, settings: withSettings || mode === 'replace', photos: withPhotos })

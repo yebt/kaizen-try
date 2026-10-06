@@ -18,21 +18,29 @@ export interface Habit {
   /** Count habits only. */
   unit?: string
   /**
-   * Count habits only.
+   * Count habits:
    * build: minimum quantity so the day is not missed.
    * quit: the limit — going above it means the day is missed.
+   * Build check habits done several times a day: how many times still count.
    */
   min?: number
   /**
-   * Count habits only.
+   * Count habits:
    * build: target quantity (full completion).
    * quit: target ceiling (full success, e.g. 0).
+   * Build check habits: times a day (unset = once). See `timesOf`.
    */
   goal?: number
   /** Scheduled weekdays, 0 = Sunday. */
   days: number[]
   /** Minutes from midnight, or null for an "anytime" habit. */
   start: number | null
+  /**
+   * Habits done several times a day: one start (minutes) per time, sorted,
+   * so each time gets its own block on the calendar. `start` mirrors slots[0].
+   * Unset = a single block holds all the times.
+   */
+  slots?: number[]
   /** Minutes. */
   duration: number
   /** Identity statement: "I'm becoming someone who…" */
