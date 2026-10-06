@@ -13,7 +13,7 @@ A minimal, mobile-first habit tracker PWA. **Small steps, every day.**
     - a **goal**: a great day
 
     For quit habits these become a **limit** (going over it means a missed day) and a **target** (a full win).
-- **Several times a day.** A "just done" habit can repeat, like brushing your teeth 3 times. The check becomes a ring with one segment per time: each tap logs one more (with Undo), and the day is done when the ring closes. You can also set how many times still count, for example 2 of 3, so a busy day isn't missed. Hold the ring to correct the count.
+- **Several times a day.** A "just done" habit can repeat, like brushing your teeth 3 times. The check becomes a ring with one segment per time: each tap logs one more (with Undo), and the day is done when the ring closes. You can also set how many times still count, for example 2 of 3, so a busy day isn't missed. Hold the ring to correct the count. With **A time for each**, every time gets its own block on the calendar (for example 8:00, 14:30 and 21:00): move each block on its own, while resizing one changes them all. Today shows the next time still to do.
 - **Calendar like Google Calendar.** Habits can have a start time plus a duration or an end time.
   - Tap an empty slot to create a habit there.
   - **Long-press** a block to drag it.

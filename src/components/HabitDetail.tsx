@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ask } from '../lib/confirm'
 import { addDays, formatDay, minutesToLabel, startOfWeek, type DateKey } from '../lib/date'
 import {
+  blocksOf,
   completionRate,
   daysSinceMiss,
   formatQty,
@@ -101,7 +102,7 @@ export function HabitDetail({ habit: h, logs, date, today, onClose }: Props) {
   const subtitle = [
     scheduleLabel(h.days),
     h.kind === 'count' ? (quit ? `limit ${formatQty(min)} · aim ≤ ${formatQty(goal)} ${h.unit}` : `minimum ${formatQty(min)} · goal ${formatQty(goal)} ${h.unit}`) : quit ? 'stay clean' : times > 1 ? `${times} times a day${min < times ? ` · ${min} counts` : ''}` : null,
-    h.start !== null ? `${minutesToLabel(h.start)}–${minutesToLabel(h.start + h.duration)}` : null,
+    blocksOf(h).length > 1 ? blocksOf(h).map(minutesToLabel).join(' · ') : h.start !== null ? `${minutesToLabel(h.start)}–${minutesToLabel(h.start + h.duration)}` : null,
   ]
     .filter(Boolean)
     .join(' · ')

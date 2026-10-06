@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { addDays } from './date'
-import { daysSinceMiss, levelInfo, progressOf, statusOf, streakOf, timesOf, totalXp } from './habits'
+import { blocksOf, daysSinceMiss, spreadSlots, levelInfo, progressOf, statusOf, streakOf, timesOf, totalXp } from './habits'
 import type { Habit, Logs } from './types'
 
 const T = '2026-03-02' // a Monday
@@ -45,6 +45,16 @@ describe('statusOf', () => {
     expect(timesOf(habit({}))).toBe(1)
     expect(timesOf(habit({ polarity: 'quit', goal: 3 }))).toBe(1)
     expect(timesOf(habit({ kind: 'count', goal: 8 }))).toBe(1)
+  })
+
+  it('a time for each: one calendar block per time', () => {
+    expect(spreadSlots(3, 8 * 60)).toEqual([480, 870, 1260]) // 8:00 · 14:30 · 21:00
+    expect(spreadSlots(2, 23 * 60, 30)).toEqual([1380, 1395].map((m) => Math.min(m, 1410)))
+    const h = habit({ goal: 3, start: 480, slots: [480, 870, 1260] })
+    expect(blocksOf(h)).toEqual([480, 870, 1260])
+    // Slots that don't match the count fall back to one block; untimed has none.
+    expect(blocksOf(habit({ goal: 2, start: 480, slots: [480, 870, 1260] }))).toEqual([480])
+    expect(blocksOf(habit({ goal: 3, start: null, slots: [480, 870, 1260] }))).toEqual([])
   })
 
   it('quit habits: clean by default, limit and target', () => {

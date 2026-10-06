@@ -32,6 +32,19 @@ describe('parseBackup', () => {
     expect(() => parseBackup(file({ habits: [{ id: 'x' }] }))).toThrow(/missing its id or name/)
   })
 
+  it('keeps per-time slots, sorted, and drops broken ones', () => {
+    const b = parseBackup(
+      file({
+        habits: [
+          habit('a', { goal: 3, start: 480, slots: [1260, 480, 870] }),
+          habit('b', { goal: 2, start: 480, slots: [480, 9999] }),
+        ],
+      }),
+    )
+    expect(b.habits[0].slots).toEqual([480, 870, 1260])
+    expect(b.habits[1].slots).toBeUndefined()
+  })
+
   it('sanitizes untrusted values', () => {
     const b = parseBackup(
       file({

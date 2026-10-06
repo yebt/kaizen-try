@@ -567,3 +567,5 @@ a.about-row:active, button.about-row:active { background: var(--soft); }
 .event.placing { z-index: 8; border: 1.5px dashed currentColor; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2); pointer-events: none; animation: fade 0.12s; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .btn.danger-fill { color: #1a0d0b; } }
 :root[data-theme='dark'] .btn.danger-fill { color: #1a0d0b; }
+.slot-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+.event b .of { font-family: var(--mono); font-size: 10px; font-weight: 500; opacity: 0.75; }

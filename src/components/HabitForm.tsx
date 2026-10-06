@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { inputToMinutes, minutesToInput } from '../lib/date'
+import { spreadSlots } from '../lib/habits'
 import { actions } from '../lib/store'
 import { toast } from '../lib/toast'
 import type { Habit } from '../lib/types'
@@ -88,9 +89,19 @@ export function HabitForm({ initial = {}, onClose }: Props) {
     const next = Math.max(1, Math.min(MAX_TIMES, n))
     // Keep "all of them" as the default bar; keep a custom minimum if it still fits.
     const keepMin = h.min !== undefined && h.min < times && h.min < next
-    set({ goal: next, min: keepMin ? h.min : next })
+    // Per-time blocks follow the count, keeping the first time where it was.
+    const slots = h.slots && next > 1 ? spreadSlots(next, h.slots[0], h.duration ?? 30) : undefined
+    set({ goal: next, min: keepMin ? h.min : next, slots })
   }
   const timed = h.start !== null && h.start !== undefined
+  const perTime = timed && times > 1 && h.slots?.length === times
+  const setSlot = (i: number, m: number) => {
+    const slots = [...h.slots!]
+    slots[i] = m
+    set({ slots, start: Math.min(...slots) })
+  }
+  const togglePerTime = (on: boolean) =>
+    set(on ? { slots: spreadSlots(times, h.start ?? 8 * 60, 15), duration: 15 } : { slots: undefined, start: h.slots?.[0] ?? h.start })
 
   const toggleDay = (d: number) => {
     const days = h.days ?? []
@@ -118,7 +129,8 @@ export function HabitForm({ initial = {}, onClose }: Props) {
       unit: h.kind === 'count' ? h.unit?.trim() : undefined,
       min: h.kind === 'count' ? h.min : multi && times > 1 ? timesMin : undefined,
       goal: h.kind === 'count' ? h.goal : multi && times > 1 ? times : undefined,
-      start: timed ? h.start! : null,
+      start: !timed ? null : perTime ? Math.min(...h.slots!) : h.start!,
+      slots: perTime ? [...h.slots!].sort((a, b) => a - b) : undefined,
       duration: Math.max(15, h.duration ?? 30),
       cue: h.cue?.trim() || undefined,
       why: h.why?.trim() || undefined,
@@ -148,7 +160,7 @@ export function HabitForm({ initial = {}, onClose }: Props) {
               <button
                 key={t.name}
                 className="chip"
-                onClick={() => setH((x) => ({ ...x, days: [0, 1, 2, 3, 4, 5, 6], start: null, duration: 30, cue: undefined, why: undefined, unit: undefined, min: undefined, goal: undefined, ...t }))}
+                onClick={() => setH((x) => ({ ...x, days: [0, 1, 2, 3, 4, 5, 6], start: null, duration: 30, cue: undefined, why: undefined, unit: undefined, min: undefined, goal: undefined, slots: undefined, ...t }))}
               >
                 <Glyph name={t.icon!} size={15} color={t.color} />
                 {t.name}
@@ -289,9 +301,48 @@ export function HabitForm({ initial = {}, onClose }: Props) {
               <br />
               <span className="xs muted">Shows on your calendar. Planning “when” makes follow-through more likely.</span>
             </span>
-            <input type="checkbox" checked={timed} onChange={(e) => set({ start: e.target.checked ? 7 * 60 : null })} />
+            <input
+              type="checkbox"
+              checked={timed}
+              onChange={(e) =>
+                set(
+                  !e.target.checked
+                    ? { start: null, slots: undefined }
+                    : times > 1
+                      ? { start: 8 * 60, slots: spreadSlots(times, 8 * 60, 15), duration: 15 }
+                      : { start: 7 * 60 },
+                )
+              }
+            />
           </label>
-          {timed && (
+          {timed && times > 1 && (
+            <div className="segmented sm" style={{ marginTop: 6 }} role="group" aria-label="Blocks">
+              <button aria-pressed={perTime} onClick={() => togglePerTime(true)}>
+                A time for each
+              </button>
+              <button aria-pressed={!perTime} onClick={() => togglePerTime(false)}>
+                One block
+              </button>
+            </div>
+          )}
+          {perTime && (
+            <div className="stack" style={{ gap: 10, marginTop: 12 }}>
+              <div className="slot-list">
+                {h.slots!.map((m, i) => (
+                  <label className="field" key={i}>
+                    <span>Time {i + 1}</span>
+                    <input className="input mono" type="time" step={300} value={minutesToInput(m)} onChange={(e) => e.target.value && setSlot(i, inputToMinutes(e.target.value))} />
+                  </label>
+                ))}
+                <label className="field">
+                  <span>Each lasts (min)</span>
+                  <NumberInput className="input mono" integer min={15} max={240} fallback={15} value={h.duration} onChange={(duration) => set({ duration })} placeholder="15" />
+                </label>
+              </div>
+              <span className="hint">Each time gets its own block on the calendar. Checking off still counts in any order.</span>
+            </div>
+          )}
+          {timed && !perTime && (
             <div className="stack" style={{ gap: 10, marginTop: 6 }}>
               <div className="grid-2">
                 <label className="field">

@@ -17,6 +17,20 @@ export function timesOf(h: Habit): number {
   return h.kind === 'check' && h.polarity === 'build' ? Math.max(1, Math.round(h.goal ?? 1)) : 1
 }
 
+/** Start of each calendar block: one per time when the habit has its own slots. */
+export function blocksOf(h: Habit): number[] {
+  if (h.start === null) return []
+  const n = timesOf(h)
+  return n > 1 && h.slots?.length === n ? h.slots : [h.start]
+}
+
+/** Spread N times through the day from `first` (e.g. 8:00 · 14:30 · 21:00), on 15-minute steps. */
+export function spreadSlots(n: number, first: number, duration = 15): number[] {
+  const last = Math.max(first, Math.min(21 * 60, 1440 - duration))
+  const step = n > 1 ? Math.max(15, Math.floor((last - first) / (n - 1) / 15) * 15) : 0
+  return Array.from({ length: n }, (_, i) => Math.min(first + i * step, 1440 - duration))
+}
+
 export function isScheduled(h: Habit, date: DateKey): boolean {
   return date >= h.createdAt && h.days.includes(weekday(date))
 }

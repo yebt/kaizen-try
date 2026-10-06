@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { inputToMinutes, minutesToInput, minutesToLabel } from '../lib/date'
-import { timesOf } from '../lib/habits'
+import { spreadSlots, timesOf } from '../lib/habits'
 import type { Habit } from '../lib/types'
 import { scheduleLabel } from './HabitDetail'
 import { HabitIcon } from './HabitIcon'
@@ -21,7 +21,8 @@ interface Props {
   habit: Habit
   start: number
   duration: number
-  onConfirm: (start: number, duration: number) => void
+  /** `slots` is set when each time gets its own block. */
+  onConfirm: (start: number, duration: number, slots?: number[]) => void
   onClose: () => void
 }
 
@@ -31,11 +32,15 @@ interface Props {
  * will change and let the time be fine-tuned before committing.
  */
 export function ScheduleSheet({ habit: h, start: initialStart, duration: initialDuration, onConfirm, onClose }: Props) {
-  const [start, setStart] = useState(initialStart)
-  const [duration, setDuration] = useState(Math.max(15, initialDuration))
-  const end = start + duration
-  const fitsDay = end <= 1440
   const times = timesOf(h)
+  const [start, setStart] = useState(initialStart)
+  // Several times a day: default to one short block per time, starting where it was dropped.
+  const [slots, setSlots] = useState<number[] | null>(() => (times > 1 ? spreadSlots(times, initialStart, 15) : null))
+  const [duration, setDuration] = useState(Math.max(15, times > 1 ? 15 : initialDuration))
+  const end = start + duration
+  const fitsDay = (slots ? Math.max(...slots) : start) + duration <= 1440
+  const sorted = slots && [...slots].sort((a, b) => a - b)
+  const setSlot = (i: number, m: number) => setSlots((x) => x && x.map((v, j) => (j === i ? m : v)))
 
   return (
     <Sheet title="Set a time" onClose={onClose} closeLabel="Cancel" className="confirm">
@@ -52,38 +57,58 @@ export function ScheduleSheet({ habit: h, start: initialStart, duration: initial
         <div className="change" aria-label="What changes">
           <span className="from">Any time</span>
           <IconRight aria-hidden />
-          <span className="to">
-            {minutesToLabel(start)} – {minutesToLabel(end % 1440)}
-          </span>
+          <span className="to">{sorted ? sorted.map(minutesToLabel).join(' · ') : `${minutesToLabel(start)} – ${minutesToLabel(end % 1440)}`}</span>
         </div>
 
-        <div className="grid-2">
-          <label className="field">
-            <span>Starts</span>
-            <input
-              className="input mono"
-              type="time"
-              step={300}
-              value={minutesToInput(start)}
-              onChange={(e) => e.target.value && setStart(inputToMinutes(e.target.value))}
-            />
-          </label>
-          <label className="field">
-            <span>Ends</span>
-            <input
-              className="input mono"
-              type="time"
-              step={300}
-              value={minutesToInput(end % 1440)}
-              onChange={(e) => {
-                if (!e.target.value) return
-                let m = inputToMinutes(e.target.value)
-                if (m <= start) m += 1440
-                setDuration(Math.max(15, m - start))
-              }}
-            />
-          </label>
-        </div>
+        {times > 1 && (
+          <div className="segmented sm" role="group" aria-label="Blocks">
+            <button aria-pressed={!!slots} onClick={() => setSlots(spreadSlots(times, start, duration))}>
+              A time for each
+            </button>
+            <button aria-pressed={!slots} onClick={() => (slots && setStart(Math.min(...slots)), setSlots(null))}>
+              One block
+            </button>
+          </div>
+        )}
+
+        {slots ? (
+          <div className="slot-list">
+            {slots.map((m, i) => (
+              <label className="field" key={i}>
+                <span>Time {i + 1}</span>
+                <input className="input mono" type="time" step={300} value={minutesToInput(m)} onChange={(e) => e.target.value && setSlot(i, inputToMinutes(e.target.value))} />
+              </label>
+            ))}
+          </div>
+        ) : (
+          <div className="grid-2">
+            <label className="field">
+              <span>Starts</span>
+              <input
+                className="input mono"
+                type="time"
+                step={300}
+                value={minutesToInput(start)}
+                onChange={(e) => e.target.value && setStart(inputToMinutes(e.target.value))}
+              />
+            </label>
+            <label className="field">
+              <span>Ends</span>
+              <input
+                className="input mono"
+                type="time"
+                step={300}
+                value={minutesToInput(end % 1440)}
+                onChange={(e) => {
+                  if (!e.target.value) return
+                  let m = inputToMinutes(e.target.value)
+                  if (m <= start) m += 1440
+                  setDuration(Math.max(15, m - start))
+                }}
+              />
+            </label>
+          </div>
+        )}
         <div className="chips" role="group" aria-label="Duration">
           {DURATIONS.map((m) => (
             <button key={m} type="button" className="chip" aria-pressed={duration === m} onClick={() => setDuration(m)}>
@@ -94,16 +119,20 @@ export function ScheduleSheet({ habit: h, start: initialStart, duration: initial
 
         <ul className="consequences">
           <li>
-            It shows on the calendar <b>{repeatPhrase(h.days)}</b>, and under <b>{partOfDay(start)}</b> on Today.
+            It shows on the calendar <b>{repeatPhrase(h.days)}</b>, and under <b>{partOfDay(sorted ? sorted[0] : start)}</b> on Today.
           </li>
-          {times > 1 && <li>One block holds all {times} times — you still tap each one off.</li>}
+          {times > 1 && (sorted ? <li>Each of the {times} times gets its own block. Check them off in any order.</li> : <li>One block holds all {times} times — you still tap each one off.</li>)}
           <li>History and streak stay exactly the same. Drag the block later to adjust, or move it back to Any time.</li>
           {!fitsDay && <li className="warn">It runs past midnight — the block stops at the end of the day.</li>}
         </ul>
 
         <div className="stack" style={{ gap: 8 }}>
-          <button className="btn primary lg block" onClick={() => onConfirm(start, Math.min(duration, 1440 - start))} autoFocus>
-            Schedule at {minutesToLabel(start)}
+          <button
+            className="btn primary lg block"
+            onClick={() => (sorted ? onConfirm(sorted[0], duration, sorted) : onConfirm(start, Math.min(duration, 1440 - start)))}
+            autoFocus
+          >
+            {sorted ? `Schedule ${times} times` : `Schedule at ${minutesToLabel(start)}`}
           </button>
           <button className="btn lg block ghost" onClick={onClose}>
             Keep it any time

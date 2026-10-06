@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { addDays, formatDay, fromKey, minutesToLabel, nowMinutes, type DateKey } from '../lib/date'
 import { haptic } from '../lib/feedback'
 import { ask } from '../lib/confirm'
-import { isScheduled, isSuccess, statusOf, timesOf } from '../lib/habits'
+import { blocksOf, isScheduled, isSuccess, statusOf, timesOf } from '../lib/habits'
 import { tapCheck } from '../lib/log'
 import { actions, useStore } from '../lib/store'
 import { toast } from '../lib/toast'
@@ -21,6 +21,8 @@ const snap = (m: number) => Math.round(m / SNAP) * SNAP
 
 interface Placed {
   habit: Habit
+  /** Which of the habit's blocks (habits done several times a day can have one per time). */
+  slot?: number
   start: number
   duration: number
   col: number
@@ -28,7 +30,7 @@ interface Placed {
 }
 
 /** Google-Calendar-style side-by-side packing for overlapping blocks. */
-export function layoutDay(items: { habit: Habit; start: number; duration: number }[]): Placed[] {
+export function layoutDay(items: { habit: Habit; start: number; duration: number; slot?: number }[]): Placed[] {
   const sorted = [...items].sort((a, b) => a.start - b.start || b.duration - a.duration)
   const out: Placed[] = []
   let cluster: Placed[] = []
@@ -68,8 +70,8 @@ function placeTip() {
 }
 
 type Gesture =
-  | { kind: 'pending'; id: string; day: DateKey; x: number; y: number; timer: number; start: number; duration: number; pointerId: number; target: HTMLElement }
-  | { kind: 'move' | 'resize'; id: string; day: DateKey; y: number; start: number; duration: number; curStart: number; curDuration: number; overAny?: boolean }
+  | { kind: 'pending'; id: string; slot: number; day: DateKey; x: number; y: number; timer: number; start: number; duration: number; pointerId: number; target: HTMLElement }
+  | { kind: 'move' | 'resize'; id: string; slot: number; day: DateKey; y: number; start: number; duration: number; curStart: number; curDuration: number; overAny?: boolean }
   // An "any time" chip: held, then dragged onto the timeline to give it a time.
   | { kind: 'chip'; id: string; day: DateKey; x: number; y: number; timer: number; pointerId: number; target: HTMLElement }
   | { kind: 'place'; id: string; duration: number; drop: { day: DateKey; start: number } | null }
@@ -86,9 +88,9 @@ export function CalendarView({ today, onNew }: Props) {
   const logs = useStore((s) => s.logs)
   const [anchor, setAnchor] = useState(today)
   const [span, setSpan] = useState<1 | 3>(() => (innerWidth >= 700 ? 3 : 1))
-  const [selected, setSelected] = useState<{ id: string; day: DateKey } | null>(null)
+  const [selected, setSelected] = useState<{ id: string; day: DateKey; slot?: number } | null>(null)
   const [detail, setDetail] = useState<{ id: string; day: DateKey } | null>(null)
-  const [live, setLive] = useState<{ id: string; start: number; duration: number; kind: 'move' | 'resize' } | null>(null)
+  const [live, setLive] = useState<{ id: string; slot: number; start: number; duration: number; kind: 'move' | 'resize' } | null>(null)
   const [ghost, setGhost] = useState<{ day: DateKey; start: number } | null>(null)
   // Dragging an any-time chip: which chip is lifted and where it would land.
   const [placing, setPlacing] = useState<{ id: string; drop: { day: DateKey; start: number } | null } | null>(null)
@@ -136,10 +138,10 @@ export function CalendarView({ today, onNew }: Props) {
     }
   }, [])
 
-  const commit = (id: string, patch: Partial<Habit>, before: Partial<Habit>) => {
+  const commit = (id: string, patch: Partial<Habit>, before: Partial<Habit>, blockStart?: number) => {
     actions.patchHabit(id, patch)
     const h = habits.find((x) => x.id === id)
-    const start = patch.start ?? h?.start ?? 0
+    const start = blockStart ?? patch.start ?? h?.start ?? 0
     const duration = patch.duration ?? h?.duration ?? 30
     toast(`${h?.name ?? 'Habit'} → ${minutesToLabel(start)}–${minutesToLabel(start + duration)} (every scheduled day)`, () => actions.patchHabit(id, before))
   }
@@ -152,16 +154,17 @@ export function CalendarView({ today, onNew }: Props) {
   }
 
   /** Any time → timed, after the user confirms in the sheet. */
-  const schedule = (id: string, day: DateKey, start: number, duration: number) => {
+  const schedule = (id: string, day: DateKey, start: number, duration: number, slots?: number[]) => {
     const h = habits.find((x) => x.id === id)
     if (!h) return
-    const before = { start: h.start, duration: h.duration }
-    actions.patchHabit(id, { start, duration })
+    const before = { start: h.start, duration: h.duration, slots: h.slots }
+    actions.patchHabit(id, { start, duration, slots })
     haptic([8, 30, 12])
     setScheduling(null)
-    setSelected({ id, day })
+    setSelected({ id, day, slot: 0 })
     requestAnimationFrame(() => revealTime(start))
-    toast(`${h.name} → ${minutesToLabel(start)} · ${partOfDay(start)}`, () => {
+    const label = slots ? slots.map(minutesToLabel).join(' · ') : `${minutesToLabel(start)} · ${partOfDay(start)}`
+    toast(`${h.name} → ${label}`, () => {
       actions.patchHabit(id, before)
       setSelected(null)
     })
@@ -176,7 +179,7 @@ export function CalendarView({ today, onNew }: Props) {
         <div className="stack" style={{ gap: 14 }}>
           <div className="change">
             <span className="from mono">
-              {minutesToLabel(h.start)} – {minutesToLabel((h.start + h.duration) % 1440)}
+              {blocksOf(h).length > 1 ? blocksOf(h).map(minutesToLabel).join(' · ') : `${minutesToLabel(h.start)} – ${minutesToLabel((h.start + h.duration) % 1440)}`}
             </span>
             <IconRight aria-hidden />
             <span className="to" style={{ fontFamily: 'inherit' }}>
@@ -184,7 +187,7 @@ export function CalendarView({ today, onNew }: Props) {
             </span>
           </div>
           <span>
-            It leaves the timeline {repeatPhrase(h.days)} and moves to <b>Anytime</b> on Today. History and streak don’t change.
+            {blocksOf(h).length > 1 ? `All ${blocksOf(h).length} blocks leave` : 'It leaves'} the timeline {repeatPhrase(h.days)} and moves to <b>Anytime</b> on Today. History and streak don’t change.
           </span>
         </div>
       ),
@@ -192,8 +195,8 @@ export function CalendarView({ today, onNew }: Props) {
       cancel: 'Keep the time',
     })
     if (!ok) return
-    const before = { start: h.start, duration: h.duration }
-    actions.patchHabit(h.id, { start: null })
+    const before = { start: h.start, duration: h.duration, slots: h.slots }
+    actions.patchHabit(h.id, { start: null, slots: undefined })
     toast(`${h.name} → Any time`, () => actions.patchHabit(h.id, before))
   }
 
@@ -223,7 +226,7 @@ export function CalendarView({ today, onNew }: Props) {
   }
 
   // ---- block gestures --------------------------------------------------------
-  const onBlockDown = (e: React.PointerEvent, h: Habit, day: DateKey) => {
+  const onBlockDown = (e: React.PointerEvent, h: Habit, day: DateKey, slot: number, start: number) => {
     e.stopPropagation()
     swipe.current = null
     const target = e.currentTarget as HTMLElement
@@ -232,19 +235,19 @@ export function CalendarView({ today, onNew }: Props) {
       if (g?.kind !== 'pending') return
       haptic(15)
       g.target.setPointerCapture?.(g.pointerId)
-      gesture.current = { kind: 'move', id: h.id, day, y: g.y, start: g.start, duration: g.duration, curStart: g.start, curDuration: g.duration }
-      setSelected({ id: h.id, day })
-      setLive({ id: h.id, start: g.start, duration: g.duration, kind: 'move' })
+      gesture.current = { kind: 'move', id: h.id, slot, day, y: g.y, start: g.start, duration: g.duration, curStart: g.start, curDuration: g.duration }
+      setSelected({ id: h.id, day, slot })
+      setLive({ id: h.id, slot, start: g.start, duration: g.duration, kind: 'move' })
     }, LONG_PRESS)
-    gesture.current = { kind: 'pending', id: h.id, day, x: e.clientX, y: e.clientY, timer, start: h.start!, duration: h.duration, pointerId: e.pointerId, target }
+    gesture.current = { kind: 'pending', id: h.id, slot, day, x: e.clientX, y: e.clientY, timer, start, duration: h.duration, pointerId: e.pointerId, target }
   }
 
-  const onHandleDown = (e: React.PointerEvent, h: Habit, day: DateKey) => {
+  const onHandleDown = (e: React.PointerEvent, h: Habit, day: DateKey, slot: number, start: number) => {
     e.stopPropagation()
     swipe.current = null
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    gesture.current = { kind: 'resize', id: h.id, day, y: e.clientY, start: h.start!, duration: h.duration, curStart: h.start!, curDuration: h.duration }
-    setLive({ id: h.id, start: h.start!, duration: h.duration, kind: 'resize' })
+    gesture.current = { kind: 'resize', id: h.id, slot, day, y: e.clientY, start, duration: h.duration, curStart: start, curDuration: h.duration }
+    setLive({ id: h.id, slot, start, duration: h.duration, kind: 'resize' })
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -273,12 +276,12 @@ export function CalendarView({ today, onNew }: Props) {
       const s = Math.min(Math.max(0, snap(g.start + dMin)), 1440 - Math.max(g.duration, SNAP))
       if (s !== g.curStart) haptic(4)
       g.curStart = s
-      setLive({ id: g.id, start: s, duration: g.duration, kind: 'move' })
+      setLive({ id: g.id, slot: g.slot, start: s, duration: g.duration, kind: 'move' })
     } else {
       const d = Math.min(Math.max(SNAP, snap(g.duration + dMin)), 1440 - g.start)
       if (d !== g.curDuration) haptic(4)
       g.curDuration = d
-      setLive({ id: g.id, start: g.start, duration: d, kind: 'resize' })
+      setLive({ id: g.id, slot: g.slot, start: g.start, duration: d, kind: 'resize' })
     }
   }
 
@@ -287,7 +290,7 @@ export function CalendarView({ today, onNew }: Props) {
     gesture.current = null
     if (g?.kind === 'pending') {
       clearTimeout(g.timer)
-      setSelected((s) => (s?.id === g.id && s.day === g.day ? null : { id: g.id, day: g.day }))
+      setSelected((s) => (s?.id === g.id && s.day === g.day && s.slot === g.slot ? null : { id: g.id, day: g.day, slot: g.slot }))
     } else if (g?.kind === 'move' && g.overAny) {
       setLive(null)
       setOverAny(false)
@@ -295,8 +298,16 @@ export function CalendarView({ today, onNew }: Props) {
       if (h) unschedule(h)
     } else if (g?.kind === 'move' || g?.kind === 'resize') {
       setLive(null)
-      if (g.curStart !== g.start || g.curDuration !== g.duration)
-        commit(g.id, { start: g.curStart, duration: g.curDuration }, { start: g.start, duration: g.duration })
+      const h = habits.find((x) => x.id === g.id)
+      const blocks = h ? blocksOf(h) : []
+      if (g.curStart === g.start && g.curDuration === g.duration) {
+        // nothing moved
+      } else if (h && blocks.length > 1) {
+        // Move just this time's block; the length is shared by all of them.
+        const slots = blocks.map((m, i) => (i === g.slot ? g.curStart : m)).sort((a, b) => a - b)
+        commit(g.id, { start: slots[0], slots, duration: g.curDuration }, { start: h.start, slots: h.slots, duration: h.duration }, g.curStart)
+        setSelected({ id: g.id, day: g.day, slot: slots.indexOf(g.curStart) })
+      } else commit(g.id, { start: g.curStart, duration: g.curDuration }, { start: g.start, duration: g.duration })
     } else if (g?.kind === 'slot' && !g.moved) {
       if (selected) setSelected(null)
       else {
@@ -502,10 +513,14 @@ export function CalendarView({ today, onNew }: Props) {
             {days.map((d) => {
               const items = active
                 .filter((h) => h.start !== null && isScheduled(h, d))
-                .map((h) => {
-                  const o = live?.id === h.id ? live : null
-                  return { habit: h, start: o ? o.start : h.start!, duration: o ? o.duration : h.duration }
-                })
+                .flatMap((h) =>
+                  blocksOf(h).map((start, slot) => {
+                    const o = live?.id === h.id ? live : null
+                    // Resizing changes every block of the habit; moving only the one being dragged.
+                    const mine = o && o.slot === slot
+                    return { habit: h, slot, start: mine ? o.start : start, duration: o && (mine || o.kind === 'resize') ? o.duration : h.duration }
+                  }),
+                )
               return (
                 <div
                   key={d}
@@ -516,14 +531,17 @@ export function CalendarView({ today, onNew }: Props) {
                 >
                   {layoutDay(items).map((p) => {
                     const h = p.habit
+                    const slot = p.slot ?? 0
+                    const n = blocksOf(h).length
                     const s = statusOf(h, logs[d]?.[h.id], d, today)
-                    const won = isSuccess(s) && h.polarity === 'build'
-                    const isSel = selected?.id === h.id && selected.day === d
-                    const isLive = live?.id === h.id
+                    // A per-time block reads as done once that many times are logged.
+                    const won = h.polarity === 'build' && (n > 1 ? (logs[d]?.[h.id]?.v ?? 0) > slot : isSuccess(s))
+                    const isSel = selected?.id === h.id && selected.day === d && (n === 1 || selected.slot === slot)
+                    const isLive = live?.id === h.id && live.slot === slot
                     const height = Math.max(p.duration * PPM, 22)
                     return (
                       <div
-                        key={h.id}
+                        key={`${h.id}:${slot}`}
                         className={`event ${won ? 'won' : ''} ${isSel ? 'selected' : ''} ${isLive && live.kind === 'move' ? 'dragging' : ''}`}
                         style={{
                           top: p.start * PPM,
@@ -532,18 +550,21 @@ export function CalendarView({ today, onNew }: Props) {
                           width: `calc(${100 / p.cols}% - 3px)`,
                           ['--c' as string]: h.color,
                         }}
-                        onPointerDown={(e) => onBlockDown(e, h, d)}
+                        onPointerDown={(e) => onBlockDown(e, h, d, slot, p.start)}
                         role="button"
-                        aria-label={`${h.name}, ${minutesToLabel(p.start)}. Tap to select, long-press to move.`}
+                        aria-label={`${h.name}${n > 1 ? `, time ${slot + 1} of ${n}` : ''}, ${minutesToLabel(p.start)}. Tap to select, long-press to move.`}
                       >
-                        <b>{h.name}</b>
+                        <b>
+                          {h.name}
+                          {n > 1 && <span className="of"> {slot + 1}/{n}</span>}
+                        </b>
                         {height > 36 && (
                           <span className="t">
                             {minutesToLabel(p.start)} – {minutesToLabel(p.start + p.duration)}
                           </span>
                         )}
                         {isSel && <span className="knob" />}
-                        {isSel && <div className="handle" onPointerDown={(e) => onHandleDown(e, h, d)} aria-label="Drag to resize" />}
+                        {isSel && <div className="handle" onPointerDown={(e) => onHandleDown(e, h, d, slot, p.start)} aria-label="Drag to resize" />}
                       </div>
                     )
                   })}
@@ -572,7 +593,7 @@ export function CalendarView({ today, onNew }: Props) {
         </div>
       </div>
 
-      {selHabit && selected && <ActionBar habit={selHabit} day={selected.day} today={today} v={logs[selected.day]?.[selHabit.id]?.v ?? 0} onOpen={() => setDetail(selected)}>
+      {selHabit && selected && <ActionBar habit={selHabit} slot={selected.slot} day={selected.day} today={today} v={logs[selected.day]?.[selHabit.id]?.v ?? 0} onOpen={() => setDetail(selected)}>
         {selHabit.start === null ? (
           <button className="btn sm" onClick={() => setScheduling({ id: selHabit.id, day: selected.day, start: suggestStart(selected.day, selHabit.duration || 30), duration: selHabit.duration || 30 })}>
             Set time
@@ -589,7 +610,7 @@ export function CalendarView({ today, onNew }: Props) {
           habit={schedulingHabit}
           start={scheduling.start}
           duration={scheduling.duration}
-          onConfirm={(start, duration) => schedule(scheduling.id, scheduling.day, start, duration)}
+          onConfirm={(start, duration, slots) => schedule(scheduling.id, scheduling.day, start, duration, slots)}
           onClose={() => setScheduling(null)}
         />
       )}
@@ -602,10 +623,15 @@ export function CalendarView({ today, onNew }: Props) {
 }
 
 /** Bottom bar for the selected habit: details, (un)schedule, and log it. */
-function ActionBar({ habit: h, day, today, v, onOpen, children }: { habit: Habit; day: DateKey; today: DateKey; v: number; onOpen: () => void; children: ReactNode }) {
+function ActionBar({ habit: h, slot, day, today, v, onOpen, children }: { habit: Habit; slot?: number; day: DateKey; today: DateKey; v: number; onOpen: () => void; children: ReactNode }) {
   const n = timesOf(h)
   const canLog = h.kind === 'check' && h.polarity === 'build' && day <= today
-  const when = h.start === null ? `Any time · ${scheduleLabel(h.days)}` : `${minutesToLabel(h.start)} – ${minutesToLabel(h.start + h.duration)} · ${scheduleLabel(h.days)}`
+  const blocks = blocksOf(h)
+  const start = blocks[slot ?? 0] ?? h.start
+  const when =
+    start === null
+      ? `Any time · ${scheduleLabel(h.days)}`
+      : `${blocks.length > 1 ? `${(slot ?? 0) + 1}/${blocks.length} · ` : ''}${minutesToLabel(start)} – ${minutesToLabel(start + h.duration)} · ${scheduleLabel(h.days)}`
   return (
     <div className="cal-action" role="toolbar" aria-label={h.name}>
       <button className="name" onClick={onOpen} aria-label={`${h.name} — details`}>

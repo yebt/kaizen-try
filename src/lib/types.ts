@@ -35,6 +35,12 @@ export interface Habit {
   days: number[]
   /** Minutes from midnight, or null for an "anytime" habit. */
   start: number | null
+  /**
+   * Habits done several times a day: one start (minutes) per time, sorted,
+   * so each time gets its own block on the calendar. `start` mirrors slots[0].
+   * Unset = a single block holds all the times.
+   */
+  slots?: number[]
   /** Minutes. */
   duration: number
   /** Identity statement: "I'm becoming someone who…" */

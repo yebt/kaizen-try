@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { minutesToLabel, type DateKey } from '../lib/date'
-import { daysSinceMiss, formatQty, statusOf, streakOf, thresholds, timesOf } from '../lib/habits'
+import { blocksOf, daysSinceMiss, formatQty, statusOf, streakOf, thresholds, timesOf } from '../lib/habits'
 import { addQty, setTimes, stepOf, tapCheck, toggleCheck, writeEntry } from '../lib/log'
 import type { Habit, Logs } from '../lib/types'
 import { HabitIcon } from './HabitIcon'
@@ -33,7 +33,9 @@ export function HabitCard({ habit: h, logs, date, today, onOpen }: Props) {
   const future = status === 'future'
 
   // One context line — the most useful thing to know right now.
-  const time = h.start !== null ? minutesToLabel(h.start) : null
+  const blocks = blocksOf(h)
+  // With a time for each, point at the next one still to do.
+  const time = blocks.length > 1 ? (v < blocks.length ? `next ${minutesToLabel(blocks[v])}` : null) : h.start !== null ? minutesToLabel(h.start) : null
   let meta: string
   let warn = false
   if (status === 'skipped') meta = 'Rest day — streak is safe'
@@ -50,7 +52,7 @@ export function HabitCard({ habit: h, logs, date, today, onOpen }: Props) {
       .filter(Boolean)
       .join(' · ')
   } else if (times > 1) {
-    const counted = status === 'ok' ? 'counts for today' : status === 'done' ? (streak.current ? `${streak.current}-day streak` : null) : min < times ? `${min} still counts` : null
+    const counted = status === 'ok' ? 'counts for today' : status === 'done' ? (streak.current ? `${streak.current}-day streak` : null) : min < times && !time ? `${min} still counts` : null
     meta = [time, `${v} of ${times} times`, counted].filter(Boolean).join(' · ')
   } else {
     meta = [time, streak.current ? `${streak.current}-day streak` : 'Start your streak today'].filter(Boolean).join(' · ')
