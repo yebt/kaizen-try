@@ -13,13 +13,14 @@ import { diffDays, todayKey } from './lib/date'
 import { haptic } from './lib/feedback'
 import { daySummary, streakOf } from './lib/habits'
 import { handleBackButton, setSystemBars } from './lib/native'
+import { themeDef } from './lib/themes'
 import { usePhotos } from './lib/photos'
 import { actions, useSettings, useStore } from './lib/store'
 import { dismiss, useToasts } from './lib/toast'
 
 type Tab = 'today' | 'calendar' | 'progress' | 'diary'
 
-const TABS: { id: Tab; label: string; Icon: typeof IconToday }[] = [
+const ALL_TABS: { id: Tab; label: string; Icon: typeof IconToday }[] = [
   { id: 'today', label: 'Today', Icon: IconToday },
   { id: 'calendar', label: 'Calendar', Icon: IconCalendar },
   { id: 'progress', label: 'Progress', Icon: IconChart },
@@ -64,21 +65,36 @@ export default function App() {
 
   useEffect(() => setDate(today), [today])
 
-  // Appearance: follow the OS unless the user picked light or dark.
+  // Appearance: "System" follows the OS; every other theme is a fixed palette on a light or dark base.
   useEffect(() => {
     const root = document.documentElement
-    if (settings.theme === 'system') delete root.dataset.theme
-    else root.dataset.theme = settings.theme
-    const dark = settings.theme === 'dark' || (settings.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
-    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', dark ? '#0e0e10' : '#f6f5f2'))
-    setSystemBars(dark)
-    if (settings.theme !== 'system') return
-    // Keep the bars in sync if the OS switches while the app is open.
+    const def = themeDef(settings.theme)
+    if (def.scheme === 'system') delete root.dataset.theme
+    else root.dataset.theme = def.scheme
+    if (def.id === 'light' || def.id === 'dark' || def.scheme === 'system') delete root.dataset.palette
+    else root.dataset.palette = def.id
     const mq = matchMedia('(prefers-color-scheme: dark)')
-    const onChange = () => setSystemBars(mq.matches)
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
+    const sync = () => {
+      const dark = def.scheme === 'dark' || (def.scheme === 'system' && mq.matches)
+      const bg = getComputedStyle(root).getPropertyValue('--bg').trim() || (dark ? '#0e0e10' : '#f6f5f2')
+      document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', bg))
+      setSystemBars(dark)
+    }
+    sync()
+    if (def.scheme !== 'system') return
+    // Keep the bars in sync if the OS switches while the app is open.
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
   }, [settings.theme])
+
+  useEffect(() => {
+    const root = document.documentElement
+    if (settings.font === 'editorial') delete root.dataset.font
+    else root.dataset.font = settings.font
+  }, [settings.font])
+
+  // The photo diary is private by default: it lives inside Progress unless you pin it to the tab bar.
+  const tabs = settings.diaryTab ? ALL_TABS : ALL_TABS.filter((t) => t.id !== 'diary')
 
   const tabRef = useRef(tab)
   tabRef.current = tab
@@ -109,12 +125,12 @@ export default function App() {
         <TodayView today={today} date={date} setDate={setDate} onNew={(d) => setDraft(d ?? {})} daysSincePhoto={daysSincePhoto} goDiary={() => setTab('diary')} onSettings={() => setSettingsOpen(true)} />
       )}
       {tab === 'calendar' && <CalendarView today={today} onNew={(d) => setDraft(d ?? {})} />}
-      {tab === 'progress' && <ProgressView today={today} />}
-      {tab === 'diary' && <DiaryView today={today} />}
+      {tab === 'progress' && <ProgressView today={today} onDiary={() => setTab('diary')} />}
+      {tab === 'diary' && <DiaryView today={today} onBack={settings.diaryTab ? undefined : () => setTab('progress')} />}
 
       <div className="tabbar">
         <nav>
-          {TABS.map(({ id, label, Icon }, i) => (
+          {tabs.map(({ id, label, Icon }, i) => (
             <Fragment key={id}>
               {i === 2 && (
                 <button className="tab-add" onClick={() => setDraft({})} aria-label="New habit">
@@ -127,6 +143,14 @@ export default function App() {
               </button>
             </Fragment>
           ))}
+          {!settings.diaryTab && (
+            <button className="tab" onClick={() => setSettingsOpen(true)} aria-label="Profile and settings">
+              <span className="avatar-mini" aria-hidden>
+                {settings.name.trim()[0]?.toUpperCase() || 'K'}
+              </span>
+              You
+            </button>
+          )}
         </nav>
       </div>
 

@@ -2,6 +2,7 @@ import { todayKey } from './date'
 import { migrateLegacyIcon } from './iconMigration'
 import { clearPhotos, listPhotos, savePhoto } from './photos'
 import { DEFAULT_SETTINGS, getSettings, getState, actions, type State } from './store'
+import { isFont, isTheme } from './themes'
 import type { Entry, Habit, Logs, Photo, Pose, Settings } from './types'
 
 /**
@@ -58,7 +59,7 @@ export async function createBackup({ includePhotos }: { includePhotos: boolean }
     app: 'kaizen',
     format: FORMAT,
     exportedAt: new Date().toISOString(),
-    settings: getSettings(),
+    settings: (({ diaryPin: _pin, ...rest }) => rest)(getSettings()),
     habits: s.habits,
     logs: s.logs,
     celebrated: s.celebrated,
@@ -147,11 +148,15 @@ function cleanSettings(raw: unknown): Settings {
   const s = isObj(raw) ? raw : {}
   return {
     name: typeof s.name === 'string' ? s.name.slice(0, 40) : DEFAULT_SETTINGS.name,
-    theme: s.theme === 'light' || s.theme === 'dark' ? s.theme : 'system',
+    theme: isTheme(s.theme) ? s.theme : 'system',
     weekStartsOn: s.weekStartsOn === 0 ? 0 : 1,
     haptics: typeof s.haptics === 'boolean' ? s.haptics : DEFAULT_SETTINGS.haptics,
     celebrations: typeof s.celebrations === 'boolean' ? s.celebrations : DEFAULT_SETTINGS.celebrations,
     photoReminderDays: [0, 7, 14, 30].includes(s.photoReminderDays as number) ? (s.photoReminderDays as number) : DEFAULT_SETTINGS.photoReminderDays,
+    font: isFont(s.font) ? s.font : DEFAULT_SETTINGS.font,
+    diaryTab: typeof s.diaryTab === 'boolean' ? s.diaryTab : DEFAULT_SETTINGS.diaryTab,
+    blurPhotos: typeof s.blurPhotos === 'boolean' ? s.blurPhotos : DEFAULT_SETTINGS.blurPhotos,
+    // The diary PIN never travels in a backup.
   }
 }
 
@@ -234,7 +239,8 @@ async function dataUrlToBlob(url: string): Promise<Blob> {
 export async function applyBackup(b: Backup, opts: ImportOptions) {
   const cur = getState()
   const data = opts.mode === 'replace' ? { habits: b.habits, logs: b.logs } : mergeData(cur, b)
-  const settings = opts.settings ? b.settings : cur.settings
+  // Imported settings never replace this device's diary PIN.
+  const settings = opts.settings ? { ...b.settings, diaryPin: cur.settings?.diaryPin } : cur.settings
   actions.importState({
     ...data,
     settings,

@@ -1,11 +1,16 @@
+import { Lock } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { addDays, formatDay, type DateKey } from '../lib/date'
 import { daySummary, levelInfo, statusOf, streakOf, strengthOf, totalWins, totalXp, XP_DONE, XP_OK, XP_PERFECT_DAY } from '../lib/habits'
-import { useStore } from '../lib/store'
+import { usePhotos } from '../lib/photos'
+import { useSettings, useStore } from '../lib/store'
 import { HabitDetail } from './HabitDetail'
 import { HabitIcon } from './HabitIcon'
+import { IconRight } from './Icons'
 
-export function ProgressView({ today }: { today: DateKey }) {
+export function ProgressView({ today, onDiary }: { today: DateKey; onDiary: () => void }) {
+  const settings = useSettings()
+  const photos = usePhotos()
   const habits = useStore((s) => s.habits)
   const logs = useStore((s) => s.logs)
   const [open, setOpen] = useState<string | null>(null)
@@ -132,6 +137,24 @@ export function ProgressView({ today }: { today: DateKey }) {
             Strength rises with consistency and dips gently on a miss — one bad day never erases your work.
           </p>
         </>
+      )}
+
+      {!settings.diaryTab && (
+        <div className="list">
+        <button className="notice" onClick={onDiary} aria-label="Open your private diary">
+          <span className="tile" style={{ width: 36, height: 36 }}>
+            <Lock size={17} aria-hidden />
+          </span>
+          <div style={{ flex: 1 }}>
+            <strong>Private diary</strong>
+            <span className="muted">
+              {photos?.length ? `${photos.length} ${photos.length === 1 ? 'entry' : 'entries'}` : 'Photos to see your change'}
+              {settings.diaryPin ? ' · PIN' : ''}
+            </span>
+          </div>
+          <IconRight width={18} className="faint" />
+        </button>
+        </div>
       )}
 
       {openHabit && <HabitDetail habit={openHabit} logs={logs} date={today} today={today} onClose={() => setOpen(null)} />}

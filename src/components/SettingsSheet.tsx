@@ -5,9 +5,13 @@ import { saveTextFile } from '../lib/files'
 import { clearPhotos, countPhotos } from '../lib/photos'
 import { actions, useSettings, useStore } from '../lib/store'
 import { toast } from '../lib/toast'
+import { isNative } from '../lib/native'
 import type { Settings } from '../lib/types'
 import { APP_VERSION } from '../lib/buildInfo'
 import { AboutSheet } from './AboutSheet'
+import { AppearanceSheet } from './AppearanceSheet'
+import { PinSheet } from './PinSheet'
+import { FONTS, themeDef } from '../lib/themes'
 import { IconRight, IconUpload } from './Icons'
 import { Sheet } from './Sheet'
 
@@ -47,6 +51,8 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [incoming, setIncoming] = useState<Backup | null>(null)
   const [about, setAbout] = useState(false)
+  const [appearance, setAppearance] = useState(false)
+  const [pinFlow, setPinFlow] = useState<null | 'set' | 'change' | 'remove' | 'export'>(null)
   const file = useRef<HTMLInputElement>(null)
   const set = (patch: Partial<Settings>) => actions.updateSettings(patch)
 
@@ -56,7 +62,9 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
 
   const days = Object.keys(logs).length
 
-  const doExport = async () => {
+  const doExport = async (verified = false) => {
+    // Photos are behind the diary PIN, so a backup with photos asks for it too.
+    if (withPhotos && photos && settings.diaryPin && !verified) return setPinFlow('export')
     setBusy('export')
     try {
       const backup = await createBackup({ includePhotos: withPhotos })
@@ -94,6 +102,39 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
 
   if (incoming) return <ImportSheet backup={incoming} onDone={() => setIncoming(null)} />
   if (about) return <AboutSheet onClose={() => setAbout(false)} />
+  if (appearance) return <AppearanceSheet onClose={() => setAppearance(false)} />
+  if (pinFlow === 'set')
+    return (
+      <PinSheet
+        mode="set"
+        onClose={() => setPinFlow(null)}
+        onDone={(diaryPin) => {
+          set({ diaryPin })
+          setPinFlow(null)
+          toast('Diary locked with your PIN')
+        }}
+      />
+    )
+  if (pinFlow)
+    return (
+      <PinSheet
+        mode="verify"
+        title={pinFlow === 'remove' ? 'Remove PIN' : pinFlow === 'change' ? 'Change PIN' : 'Export with photos'}
+        hint={pinFlow === 'change' ? 'Enter your current PIN' : undefined}
+        onClose={() => setPinFlow(null)}
+        onDone={() => {
+          if (pinFlow === 'remove') {
+            set({ diaryPin: undefined })
+            toast('PIN removed')
+            setPinFlow(null)
+          } else if (pinFlow === 'change') setPinFlow('set')
+          else {
+            setPinFlow(null)
+            void doExport(true)
+          }
+        }}
+      />
+    )
 
   return (
     <Sheet title="Profile & settings" onClose={onClose} closeLabel="Done">
@@ -111,20 +152,68 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
         <section className="group">
           <h3 className="lbl">Preferences</h3>
           <div className="list settings-list">
-            <div className="setting">
-              <b>Appearance</b>
-              <Seg label="Appearance" value={settings.theme} onChange={(theme) => set({ theme })} options={[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']]} />
-            </div>
+            <button className="about-row setting-link" onClick={() => setAppearance(true)}>
+              <span>
+                <b>Appearance</b>
+                <span className="xs muted">Theme and font</span>
+              </span>
+              <span className="about-value">
+                {themeDef(settings.theme).label} · {FONTS.find((f) => f.id === settings.font)?.label}
+                <IconRight width={16} height={16} aria-hidden />
+              </span>
+            </button>
             <div className="setting">
               <b>Week starts on</b>
               <Seg label="Week starts on" value={settings.weekStartsOn} onChange={(weekStartsOn) => set({ weekStartsOn })} options={[[1, 'Monday'], [0, 'Sunday']]} />
             </div>
-            <div className="setting">
-              <b>Progress photo reminder</b>
-              <Seg label="Photo reminder" value={settings.photoReminderDays} onChange={(photoReminderDays) => set({ photoReminderDays })} options={[[0, 'Off'], [7, '7 d'], [14, '14 d'], [30, '30 d']]} />
-            </div>
             <Toggle label="Haptics" hint="A light tap when you check things off" checked={settings.haptics} onChange={(haptics) => set({ haptics })} />
             <Toggle label="Celebrations" hint="Confetti for perfect days and milestones" checked={settings.celebrations} onChange={(celebrations) => set({ celebrations })} />
+          </div>
+        </section>
+
+        <section className="group">
+          <h3 className="lbl">Photo diary · privacy</h3>
+          <div className="list settings-list">
+            <div className="setting-pin">
+              <span>
+                <b>Diary PIN</b>
+                <span className="xs muted">{settings.diaryPin ? 'Asked every time you open the diary' : 'Lock the diary with a 4-digit PIN'}</span>
+              </span>
+              {settings.diaryPin ? (
+                <span className="row" style={{ gap: 6 }}>
+                  <button className="btn sm" onClick={() => setPinFlow('change')}>
+                    Change
+                  </button>
+                  <button className="btn sm ghost" onClick={() => setPinFlow('remove')}>
+                    Remove
+                  </button>
+                </span>
+              ) : (
+                <button className="btn sm primary" onClick={() => setPinFlow('set')}>
+                  Set PIN
+                </button>
+              )}
+            </div>
+            <Toggle label="Blur photos" hint="Thumbnails stay blurred until you open one" checked={settings.blurPhotos} onChange={(blurPhotos) => set({ blurPhotos })} />
+            <Toggle
+              label="Diary in the tab bar"
+              hint={settings.diaryTab ? 'Shown as its own tab' : 'Hidden — open it from Progress'}
+              checked={settings.diaryTab}
+              onChange={(diaryTab) => set({ diaryTab })}
+            />
+            <div className="setting">
+              <b>Check-in reminder</b>
+              <span className="xs muted" style={{ marginTop: -6 }}>
+                A discreet “Diary check-in” card on Today
+              </span>
+              <Seg label="Check-in reminder" value={settings.photoReminderDays} onChange={(photoReminderDays) => set({ photoReminderDays })} options={[[0, 'Off'], [7, '7 d'], [14, '14 d'], [30, '30 d']]} />
+            </div>
+            <div className="setting">
+              <span className="xs muted">
+                The PIN keeps the diary away from anyone holding your phone{isNative ? ', and the diary is hidden from screenshots and the recent-apps preview' : ''}. Photos never
+                leave this device unless you export them.
+              </span>
+            </div>
           </div>
         </section>
 
@@ -143,7 +232,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
               onChange={setWithPhotos}
             />
             <div className="setting" style={{ gap: 10 }}>
-              <button className="btn primary block" onClick={doExport} disabled={busy !== null || (!habits.length && !photos)}>
+              <button className="btn primary block" onClick={() => doExport()} disabled={busy !== null || (!habits.length && !photos)}>
                 {busy === 'export' ? 'Preparing…' : 'Export backup'}
               </button>
               <button className="btn block" onClick={() => file.current?.click()} disabled={busy !== null}>

@@ -1,3 +1,4 @@
+import { Lock } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { addDays, formatDay, fromKey, startOfWeek, type DateKey } from '../lib/date'
 import { daySummary, isSuccess, levelInfo, progressOf, statusOf, streakOf, totalXp } from '../lib/habits'
@@ -7,7 +8,7 @@ import { HabitCard } from './HabitCard'
 import { HabitDetail } from './HabitDetail'
 import { TEMPLATES, type Draft } from './HabitForm'
 import { HabitIcon } from './HabitIcon'
-import { IconCamera, IconFlame, IconRight } from './Icons'
+import { IconFlame, IconRight } from './Icons'
 
 interface Props {
   today: DateKey
@@ -195,11 +196,12 @@ export function TodayView({ today, date, setDate, onNew, daysSincePhoto, goDiary
               {showPhoto && (
                 <button className="notice" onClick={goDiary}>
                   <span className="tile" style={{ width: 36, height: 36 }}>
-                    <IconCamera width={18} />
+                    <Lock size={17} aria-hidden />
                   </span>
                   <div style={{ flex: 1 }}>
-                    <strong>{daysSincePhoto === null ? 'Take your first progress photo' : `Progress photo · ${daysSincePhoto} days since the last`}</strong>
-                    <span className="muted">Change is slow day to day — photos make it visible.</span>
+                    {/* Discreet on purpose: nothing here says "body" or "photo" to someone glancing at your screen. */}
+                    <strong>Diary check-in</strong>
+                    <span className="muted">{daysSincePhoto === null ? 'Start your private diary' : `${daysSincePhoto} days since your last entry`}</span>
                   </div>
                   <IconRight width={18} className="faint" />
                 </button>

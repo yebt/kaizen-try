@@ -20,6 +20,9 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   celebrations: true,
   photoReminderDays: 14,
+  font: 'editorial',
+  diaryTab: false,
+  blurPhotos: true,
 }
 
 const KEY = 'kaizen:v1'

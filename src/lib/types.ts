@@ -81,7 +81,15 @@ export interface PhotoMeta {
   createdAt: number
 }
 
-export type Theme = 'system' | 'light' | 'dark'
+/** 'system' follows the OS; the rest are fixed palettes (see lib/themes). */
+export type Theme = 'system' | 'light' | 'dark' | 'sand' | 'sage' | 'rose' | 'ocean' | 'forest' | 'plum' | 'midnight'
+export type FontStyle = 'editorial' | 'modern' | 'classic' | 'rounded' | 'readable' | 'system'
+
+/** Salted SHA-256 of the diary PIN. A privacy curtain, not encryption. */
+export interface PinLock {
+  salt: string
+  hash: string
+}
 
 /** Profile and preferences — travel with exports. */
 export interface Settings {
@@ -94,4 +102,11 @@ export interface Settings {
   celebrations: boolean
   /** Remind to take a progress photo after this many days; 0 = off. */
   photoReminderDays: number
+  font: FontStyle
+  /** Show the photo diary as a tab; otherwise it lives inside Progress. */
+  diaryTab: boolean
+  /** Blur photo thumbnails until you open one. */
+  blurPhotos: boolean
+  /** Ask for a PIN to open the diary. Never exported in backups. */
+  diaryPin?: PinLock
 }
