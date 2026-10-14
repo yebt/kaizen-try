@@ -37,9 +37,24 @@ A minimal, mobile-first habit tracker PWA. **Small steps, every day.**
   - Pose tags and notes on each photo.
   - A **before/after slider** that compares your first and latest photo, or any two you pick.
   - Photos stay on your device (IndexedDB).
+  - **Private by default.**
+    - The diary isn't in the tab bar; open it from **Progress → Private diary** (or turn the tab back on in Settings).
+    - Thumbnails and the before/after slider stay **blurred** until you tap them (eye button to show or hide all).
+    - Optional **4-digit PIN**, asked every time you open the diary; it locks again when you leave it or the app goes to the background. A forgotten PIN can only be removed by deleting the photos. The PIN is a privacy curtain, not encryption, and it's never included in backups (exporting with photos asks for it).
+    - On Android the diary is hidden from screenshots and the recent-apps preview.
+    - The Today reminder is a discreet "Diary check-in" card.
 - **Icons:** about 200 line icons for habits (Lucide), in 12 categories such as health, fitness, food, learning, money and quit & limit. The icon picker has a search box that understands English and Spanish (`agua`, `water`, `gym`, `leer`), a category filter, and suggestions based on the habit's name. A new habit's icon follows its name until you pick one yourself. To add or retag icons, edit `scripts/gen-icon-catalog.py` and run it.
-- Works offline, can be installed as an app, supports dark and light mode, and respects reduced-motion settings.
-- **Profile & settings** (tap the avatar on Today): your name, appearance (System / Light / Dark), which day the week starts on, how often to remind you about progress photos, haptics and celebrations.
+- **Reminders** (Settings → Notifications), scheduled on the device, so they work with the app closed and after a restart (Android):
+  - a **morning plan** ("4 habits today — start with the easiest one") and an **evening check-in** that only fires if something is still open;
+  - **timed habits** remind at their calendar block (or 5/15 minutes before), one per block for habits with a time for each; any habit can have its own **custom reminder time**, or none, in its Edit screen;
+  - a habit you've already done doesn't remind you again that day; tapping a reminder opens Today;
+  - **Hide habit names** shows "Habit reminder" instead (lock screen included), and the diary check-in is always discreet;
+  - two weeks are planned ahead and re-planned whenever you open the app or change something. In the browser, reminders only arrive while Kaizen is open.
+- **Themes and fonts** (Settings → Appearance), applied instantly:
+  - Themes: System, Paper (light), Ink (dark), Sand, Sage, Rose (light) and Ocean, Forest, Plum, Midnight (dark, Midnight is pure black for OLED). Each palette keeps text contrast at 4.5:1 or better.
+  - Fonts: Editorial (serif titles, default), Modern, Classic (Fraunces), Rounded (Nunito), Readable (Atkinson Hyperlegible, made for low vision) and Device (your phone's font). Numbers always use a fixed-width font.
+- Works offline, can be installed as an app, and respects reduced-motion settings.
+- **Profile & settings** (tap the avatar on Today, or **You** in the tab bar): your name, appearance, which day the week starts on, haptics, celebrations, and the photo diary's privacy options.
 - **Backup & restore** in the same sheet:
   - **Export** saves everything (habits, history, profile and settings) to a `.json` file, with or without photos.
   - **Import** shows what's in the file first, then lets you **Merge** it into your data (the file wins where both have the same entry) or **Replace** your data with it.
@@ -51,7 +66,7 @@ A minimal, mobile-first habit tracker PWA. **Small steps, every day.**
 The UI is quiet and uses a small set of tokens, all in `src/styles.css`:
 
 - **Colors:** a warm off-white or ink background, and one green accent that is used only to mean "done". Each habit also has its own muted tint.
-- **Fonts:** Instrument Serif for page titles, Geist for the interface and Geist Mono for numbers. The fonts are bundled with the app, so it works fully offline.
+- **Fonts:** by default Instrument Serif for page titles, Geist for the interface and Geist Mono for numbers; other font styles can be picked in Settings. All fonts are bundled with the app, so it works fully offline.
 - **Layout:** grouped lists with hairline dividers, line icons, 44 px minimum touch targets, and automatic light and dark mode.
 
 ## Run

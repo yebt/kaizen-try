@@ -45,6 +45,14 @@ describe('parseBackup', () => {
     expect(b.habits[1].slots).toBeUndefined()
   })
 
+  it('keeps themes and fonts, and never takes a diary PIN from a file', () => {
+    const b = parseBackup(file({ settings: { theme: 'ocean', font: 'rounded', diaryTab: true, blurPhotos: false, diaryPin: { salt: 'x', hash: 'y' } } }))
+    expect(b.settings).toMatchObject({ theme: 'ocean', font: 'rounded', diaryTab: true, blurPhotos: false })
+    expect(b.settings.diaryPin).toBeUndefined()
+    const odd = parseBackup(file({ settings: { theme: 'neon', font: 'comic', diaryTab: 'yes' } }))
+    expect(odd.settings).toMatchObject({ theme: 'system', font: 'editorial', diaryTab: false, blurPhotos: true })
+  })
+
   it('sanitizes untrusted values', () => {
     const b = parseBackup(
       file({

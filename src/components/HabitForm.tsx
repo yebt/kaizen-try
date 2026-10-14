@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { inputToMinutes, minutesToInput } from '../lib/date'
 import { spreadSlots } from '../lib/habits'
-import { actions } from '../lib/store'
+import { actions, useSettings } from '../lib/store'
 import { toast } from '../lib/toast'
 import type { Habit } from '../lib/types'
 import { Glyph } from './HabitIcon'
@@ -383,6 +383,8 @@ export function HabitForm({ initial = {}, onClose }: Props) {
           )}
         </div>
 
+        <ReminderField draft={h} timed={timed} perTime={perTime} onChange={(reminder) => set({ reminder })} />
+
         <label className="field">
           <span>Cue · when or where (optional)</span>
           <input className="input" value={h.cue ?? ''} onChange={(e) => set({ cue: e.target.value })} placeholder={quit ? 'When I feel the urge, I will…' : 'After my morning coffee'} maxLength={80} />
@@ -409,5 +411,60 @@ export function HabitForm({ initial = {}, onClose }: Props) {
         </button>
       </div>
     </Sheet>
+  )
+}
+
+/** Per-habit reminder: follow the calendar block (timed habits), a custom time, or none. */
+function ReminderField({ draft: h, timed, perTime, onChange }: { draft: Draft; timed: boolean; perTime: boolean; onChange: (r: number | 'off' | undefined) => void }) {
+  const notify = useSettings().notify
+  const mode = h.reminder === 'off' ? 'off' : typeof h.reminder === 'number' ? 'custom' : timed ? 'auto' : 'off'
+  const lead = notify.timedLead
+  const autoHint =
+    lead === null ? 'Calendar reminders are off in Settings → Notifications' : `${lead ? `${lead} min before` : 'At the start of'} ${perTime ? 'each block' : 'the block'}`
+  const options: [typeof mode, string][] = timed
+    ? [
+        ['auto', 'With calendar'],
+        ['custom', 'Custom time'],
+        ['off', 'Off'],
+      ]
+    : [
+        ['off', 'Off'],
+        ['custom', 'Custom time'],
+      ]
+  return (
+    <div className="field">
+      <span>Reminder</span>
+      <div className="segmented sm" role="group" aria-label="Reminder">
+        {options.map(([m, l]) => (
+          <button
+            key={m}
+            type="button"
+            aria-pressed={mode === m}
+            onClick={() => onChange(m === 'auto' ? undefined : m === 'off' ? 'off' : typeof h.reminder === 'number' ? h.reminder : (h.start ?? 9 * 60))}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      {mode === 'custom' && (
+        <input
+          className="input mono"
+          type="time"
+          step={300}
+          value={minutesToInput(h.reminder as number)}
+          onChange={(e) => e.target.value && onChange(inputToMinutes(e.target.value))}
+          aria-label="Reminder time"
+        />
+      )}
+      <span className="hint">
+        {!notify.enabled
+          ? 'Reminders are off — turn them on in Settings → Notifications.'
+          : mode === 'auto'
+            ? autoHint
+            : mode === 'custom'
+              ? 'Every day this habit repeats. Skipped once it’s done.'
+              : 'No reminder for this habit.'}
+      </span>
+    </div>
   )
 }

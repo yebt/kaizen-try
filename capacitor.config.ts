@@ -8,6 +8,12 @@ const config: CapacitorConfig = {
     // Matches the app's light background so there's no flash while loading.
     backgroundColor: '#f6f5f2',
   },
+  plugins: {
+    LocalNotifications: {
+      smallIcon: 'ic_stat_kaizen',
+      iconColor: '#1f6f5c',
+    },
+  },
 }
 
 export default config

@@ -43,6 +43,11 @@ export interface Habit {
   slots?: number[]
   /** Minutes. */
   duration: number
+  /**
+   * Reminder: minutes from midnight for a custom time, 'off' for none.
+   * Unset = default: timed habits follow their calendar blocks, untimed get none.
+   */
+  reminder?: number | 'off'
   /** Identity statement: "I'm becoming someone who…" */
   why?: string
   /** Implementation intention cue: "after coffee", "at the gym". */
@@ -81,7 +86,15 @@ export interface PhotoMeta {
   createdAt: number
 }
 
-export type Theme = 'system' | 'light' | 'dark'
+/** 'system' follows the OS; the rest are fixed palettes (see lib/themes). */
+export type Theme = 'system' | 'light' | 'dark' | 'sand' | 'sage' | 'rose' | 'ocean' | 'forest' | 'plum' | 'midnight'
+export type FontStyle = 'editorial' | 'modern' | 'classic' | 'rounded' | 'readable' | 'system'
+
+/** Salted SHA-256 of the diary PIN. A privacy curtain, not encryption. */
+export interface PinLock {
+  salt: string
+  hash: string
+}
 
 /** Profile and preferences — travel with exports. */
 export interface Settings {
@@ -94,4 +107,27 @@ export interface Settings {
   celebrations: boolean
   /** Remind to take a progress photo after this many days; 0 = off. */
   photoReminderDays: number
+  font: FontStyle
+  /** Show the photo diary as a tab; otherwise it lives inside Progress. */
+  diaryTab: boolean
+  /** Blur photo thumbnails until you open one. */
+  blurPhotos: boolean
+  notify: NotifySettings
+  /** Ask for a PIN to open the diary. Never exported in backups. */
+  diaryPin?: PinLock
+}
+
+/** Local reminders (Settings → Notifications). Times are minutes from midnight; null = off. */
+export interface NotifySettings {
+  enabled: boolean
+  /** "Plan your day" summary. */
+  morning: number | null
+  /** "Anything left?" check-in. */
+  evening: number | null
+  /** Minutes before a timed habit's block; null = no automatic reminders. */
+  timedLead: number | null
+  /** Discreet diary check-in when one is due. */
+  diary: boolean
+  /** Say "Habit reminder" instead of the habit's name. */
+  hideNames: boolean
 }

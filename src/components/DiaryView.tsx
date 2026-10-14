@@ -1,17 +1,20 @@
+import { Eye, EyeOff, Lock } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ask } from '../lib/confirm'
 import { diffDays, formatDay, todayKey, type DateKey } from '../lib/date'
-import { compress, deletePhoto, savePhoto, updatePhoto, usePhotos, type PhotoView } from '../lib/photos'
-import { uid } from '../lib/store'
+import { clearPhotos, compress, deletePhoto, savePhoto, updatePhoto, usePhotos, type PhotoView } from '../lib/photos'
+import { checkPin, lockDiary, setSecureScreen, unlockDiary, useDiaryLocked } from '../lib/privacy'
+import { actions, uid, useSettings } from '../lib/store'
 import { toast } from '../lib/toast'
 import type { Pose } from '../lib/types'
 import { Camera, POSES } from './Camera'
-import { IconCamera, IconCompare, IconTrash, IconUpload } from './Icons'
+import { IconCamera, IconCompare, IconLeft, IconTrash, IconUpload } from './Icons'
+import { PinPad } from './PinPad'
 import { Sheet } from './Sheet'
 
 const short = (d: DateKey) => formatDay(d, { day: 'numeric', month: 'short' })
 
-function Compare({ a, b }: { a: PhotoView; b: PhotoView }) {
+function Compare({ a, b, veiled, onReveal }: { a: PhotoView; b: PhotoView; veiled: boolean; onReveal: () => void }) {
   const [pos, setPos] = useState(50)
   const ref = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
@@ -19,6 +22,16 @@ function Compare({ a, b }: { a: PhotoView; b: PhotoView }) {
     const r = ref.current!.getBoundingClientRect()
     setPos(Math.min(100, Math.max(0, ((x - r.left) / r.width) * 100)))
   }
+  if (veiled)
+    return (
+      <button className="compare veil" onClick={onReveal} aria-label="Show the before and after comparison">
+        <img src={b.url} alt="" />
+        <span className="veil-cover">
+          <EyeOff aria-hidden />
+          Tap to show
+        </span>
+      </button>
+    )
   return (
     <div
       className="compare"
@@ -59,7 +72,66 @@ function Compare({ a, b }: { a: PhotoView; b: PhotoView }) {
   )
 }
 
-export function DiaryView({ today }: { today: DateKey }) {
+/** Locked diary: PIN first. Forgetting it means clearing the photos — there is no back door. */
+function DiaryLock({ onBack }: { onBack?: () => void }) {
+  const settings = useSettings()
+  const forgot = async () => {
+    const ok = await ask({
+      title: 'Forgot your PIN?',
+      body: 'For your privacy the PIN can’t be recovered. Removing it deletes every photo in the diary — your habits and history stay.',
+      confirm: 'Delete photos and remove PIN',
+      danger: true,
+    })
+    if (!ok) return
+    await clearPhotos()
+    actions.updateSettings({ diaryPin: undefined })
+    toast('PIN removed · diary is empty')
+  }
+  return (
+    <div className="app">
+      {onBack && (
+        <button className="back-link" onClick={onBack}>
+          <IconLeft /> Progress
+        </button>
+      )}
+      <div className="diary-lock">
+        <span className="lock-badge" aria-hidden>
+          <Lock size={24} />
+        </span>
+        <PinPad
+          title="Private diary"
+          hint="Enter your PIN"
+          onComplete={async (pin) => {
+            if (settings.diaryPin && (await checkPin(pin, settings.diaryPin))) unlockDiary()
+            else return 'Wrong PIN — try again'
+          }}
+        />
+        <button className="forgot" onClick={forgot}>
+          Forgot PIN?
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function DiaryView({ today, onBack }: { today: DateKey; onBack?: () => void }) {
+  const settings = useSettings()
+  const locked = useDiaryLocked(Boolean(settings.diaryPin))
+  // Keep the diary out of screenshots / recent apps, and lock it again on the way out.
+  useEffect(() => {
+    setSecureScreen(true)
+    return () => {
+      setSecureScreen(false)
+      lockDiary()
+    }
+  }, [])
+  if (locked) return <DiaryLock onBack={onBack} />
+  return <DiaryContent today={today} onBack={onBack} blur={settings.blurPhotos} hasPin={Boolean(settings.diaryPin)} />
+}
+
+function DiaryContent({ today, onBack, blur, hasPin }: { today: DateKey; onBack?: () => void; blur: boolean; hasPin: boolean }) {
+  const [revealed, setRevealed] = useState(!blur)
+  const veiled = blur && !revealed
   const photos = usePhotos()
   const [pose, setPose] = useState<Pose>('front')
   const [filter, setFilter] = useState<Pose | 'all'>('all')
@@ -123,12 +195,27 @@ export function DiaryView({ today }: { today: DateKey }) {
 
   return (
     <div className="app">
+      {onBack && (
+        <button className="back-link" onClick={onBack} style={{ marginBottom: -12 }}>
+          <IconLeft /> Progress
+        </button>
+      )}
       <header className="page-head">
         <div>
           <div className="eyebrow">{count ? `${count} ${count === 1 ? 'photo' : 'photos'} · since ${short(first!.date)}` : 'See your change'}</div>
           <h1>Diary</h1>
         </div>
         <div className="row" style={{ gap: 8 }}>
+          {blur && count > 0 && (
+            <button className="icon-btn outline" onClick={() => setRevealed((r) => !r)} aria-pressed={revealed} aria-label={revealed ? 'Blur photos' : 'Show photos'}>
+              {revealed ? <EyeOff size={20} /> : <Eye size={20} />}
+            </button>
+          )}
+          {hasPin && (
+            <button className="icon-btn outline" onClick={lockDiary} aria-label="Lock diary">
+              <Lock size={20} />
+            </button>
+          )}
           {count >= 2 && (
             <button
               className="icon-btn outline"
@@ -158,7 +245,7 @@ export function DiaryView({ today }: { today: DateKey }) {
       )}
 
       {pair ? (
-        <Compare a={pair[0]} b={pair[1]} />
+        <Compare a={pair[0]} b={pair[1]} veiled={veiled} onReveal={() => setRevealed(true)} />
       ) : (
         photos && (
           <div className="panel empty">
@@ -211,6 +298,7 @@ export function DiaryView({ today }: { today: DateKey }) {
               return (
                 <button
                   key={p.id}
+                  className={veiled ? 'veil' : undefined}
                   aria-pressed={idx >= 0}
                   aria-label={`${p.pose} photo, ${short(p.date)}`}
                   onClick={() => {
@@ -219,6 +307,11 @@ export function DiaryView({ today }: { today: DateKey }) {
                   }}
                 >
                   <img src={p.url} alt="" loading="lazy" />
+                  {veiled && (
+                    <span className="veil-cover" aria-hidden>
+                      <EyeOff />
+                    </span>
+                  )}
                   <span className="stamp">{short(p.date)}</span>
                   {idx >= 0 && <span className="n">{idx + 1}</span>}
                 </button>

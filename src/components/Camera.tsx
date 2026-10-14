@@ -1,7 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import { haptic } from '../lib/feedback'
 import type { Pose } from '../lib/types'
-import { IconFlip, IconTimer, IconX } from './Icons'
+import { IconCamera, IconFlip, IconTimer, IconX } from './Icons'
+
+// Android's WebView paints a big grey "play" poster on a video until frames arrive; a blank one hides it.
+const BLANK_POSTER = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='
+const SLOW_START_MS = 8000
+
+/** JPEG bytes from a data URL, synchronously. */
+function dataUrlToBlob(url: string): Blob {
+  const [head, data] = url.split(',')
+  const bin = atob(data)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return new Blob([bytes], { type: head.match(/:(.*?);/)?.[1] ?? 'image/jpeg' })
+}
 
 export const POSES: { id: Pose; label: string }[] = [
   { id: 'front', label: 'Front' },
@@ -31,6 +44,15 @@ export function Camera({ pose, setPose, ghostUrl, ghostLabel, onCapture, onClose
   const [opacity, setOpacity] = useState(0.38)
   const [timer, setTimer] = useState<0 | 3 | 10>(3)
   const [count, setCount] = useState<number | null>(null)
+  // 'starting' until the first frame shows; 'slow' if the camera never comes up.
+  const [state, setState] = useState<'starting' | 'live' | 'slow'>('starting')
+  const [capturing, setCapturing] = useState(false)
+
+  useEffect(() => {
+    setState('starting')
+    const t = setTimeout(() => setState((s) => (s === 'starting' ? 'slow' : s)), SLOW_START_MS)
+    return () => clearTimeout(t)
+  }, [facing])
 
   useEffect(() => {
     let stream: MediaStream | null = null
@@ -81,11 +103,14 @@ export function Camera({ pose, setPose, ghostUrl, ghostLabel, onCapture, onClose
     }
     ctx.drawImage(v, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, canvas.width, canvas.height)
     haptic([10, 30, 10])
-    canvas.toBlob((b) => b && onCapture(b), 'image/jpeg', 0.88)
+    // Flash first, then encode. canvas.toBlob() can sit idle in Android's WebView until the next
+    // touch (the photo only "arrived" after tapping again), so encode synchronously instead.
+    setCapturing(true)
+    setTimeout(() => onCapture(dataUrlToBlob(canvas.toDataURL('image/jpeg', 0.88))), 60)
   }
 
   const shoot = () => {
-    if (count !== null) return
+    if (count !== null || capturing) return
     if (!timer) return snap()
     let n = timer
     setCount(n)
@@ -106,10 +131,36 @@ export function Camera({ pose, setPose, ghostUrl, ghostLabel, onCapture, onClose
     <div className="camera">
       <div className="view">
         <div className="frame">
-          <video ref={video} autoPlay playsInline muted className={facing === 'user' ? 'mirror' : ''} />
+          <video
+            ref={video}
+            autoPlay
+            playsInline
+            muted
+            poster={BLANK_POSTER}
+            onPlaying={() => setState('live')}
+            className={`${facing === 'user' ? 'mirror' : ''} ${state === 'live' ? '' : 'hidden'}`}
+          />
+          {state !== 'live' && (
+            <div className="cam-loading" role="status">
+              <span className={`cam-spinner ${state === 'slow' ? 'stopped' : ''}`} aria-hidden>
+                <IconCamera />
+              </span>
+              {state === 'starting' ? (
+                <span>Starting camera…</span>
+              ) : (
+                <>
+                  <span>The camera didn’t start</span>
+                  <button className="cam-fallback" onClick={onUnavailable}>
+                    Use the phone’s camera app
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {ghostUrl && opacity > 0 && <img className="ghost" src={ghostUrl} alt="" style={{ opacity }} />}
           <div className="thirds" />
           {count !== null && <div className="count">{count}</div>}
+          {capturing && <div className="cam-flash" aria-hidden />}
           {ghostLabel && count === null && <div className="hint-pill">Line up with your {ghostLabel} photo</div>}
         </div>
         <div className="top">
@@ -143,7 +194,7 @@ export function Camera({ pose, setPose, ghostUrl, ghostLabel, onCapture, onClose
         )}
         <div className="shutter-row">
           <div className="thumb">{ghostUrl && <img src={ghostUrl} alt="" />}</div>
-          <button className="shutter" onClick={shoot} aria-label="Take photo" />
+          <button className="shutter" onClick={shoot} aria-label="Take photo" disabled={state !== 'live' || capturing || count !== null} />
           <button className="flip" onClick={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))} aria-label="Flip camera">
             <IconFlip />
           </button>
