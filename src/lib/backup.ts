@@ -3,7 +3,8 @@ import { migrateLegacyIcon } from './iconMigration'
 import { clearPhotos, listPhotos, savePhoto } from './photos'
 import { DEFAULT_SETTINGS, getSettings, getState, actions, type State } from './store'
 import { isFont, isTheme } from './themes'
-import type { Entry, Habit, Logs, Photo, Pose, Settings } from './types'
+import { DEFAULT_NOTIFY } from './notify'
+import type { Entry, Habit, Logs, NotifySettings, Photo, Pose, Settings } from './types'
 
 /**
  * Backup file format. Plain JSON so it's portable and human-readable.
@@ -113,6 +114,7 @@ function cleanHabit(raw: unknown, i: number, format: number): Habit {
     start: start !== undefined && start >= 0 && start < 1440 ? start : null,
     slots: cleanSlots(raw.slots),
     duration: Math.max(15, num(raw.duration) ?? 30),
+    reminder: raw.reminder === 'off' ? 'off' : (minuteOrNull(raw.reminder, null) ?? undefined),
     why: typeof raw.why === 'string' ? raw.why : undefined,
     cue: typeof raw.cue === 'string' ? raw.cue : undefined,
     createdAt: typeof raw.createdAt === 'string' && DATE_RE.test(raw.createdAt) ? raw.createdAt : todayKey(),
@@ -144,6 +146,21 @@ function cleanLogs(raw: unknown, ids: Set<string>): Logs {
   return logs
 }
 
+const minuteOrNull = (v: unknown, fallback: number | null) =>
+  v === null ? null : typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 1440 ? v : fallback
+
+function cleanNotify(raw: unknown): NotifySettings {
+  const n = isObj(raw) ? raw : {}
+  return {
+    enabled: n.enabled === true,
+    morning: minuteOrNull(n.morning, DEFAULT_NOTIFY.morning),
+    evening: minuteOrNull(n.evening, DEFAULT_NOTIFY.evening),
+    timedLead: n.timedLead === null ? null : [0, 5, 10, 15, 30].includes(n.timedLead as number) ? (n.timedLead as number) : DEFAULT_NOTIFY.timedLead,
+    diary: typeof n.diary === 'boolean' ? n.diary : DEFAULT_NOTIFY.diary,
+    hideNames: n.hideNames === true,
+  }
+}
+
 function cleanSettings(raw: unknown): Settings {
   const s = isObj(raw) ? raw : {}
   return {
@@ -156,6 +173,7 @@ function cleanSettings(raw: unknown): Settings {
     font: isFont(s.font) ? s.font : DEFAULT_SETTINGS.font,
     diaryTab: typeof s.diaryTab === 'boolean' ? s.diaryTab : DEFAULT_SETTINGS.diaryTab,
     blurPhotos: typeof s.blurPhotos === 'boolean' ? s.blurPhotos : DEFAULT_SETTINGS.blurPhotos,
+    notify: cleanNotify(s.notify),
     // The diary PIN never travels in a backup.
   }
 }

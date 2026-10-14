@@ -11,6 +11,7 @@ import { APP_VERSION } from '../lib/buildInfo'
 import { AboutSheet } from './AboutSheet'
 import { AppearanceSheet } from './AppearanceSheet'
 import { PinSheet } from './PinSheet'
+import { NotificationsSheet } from './NotificationsSheet'
 import { FONTS, themeDef } from '../lib/themes'
 import { IconRight, IconUpload } from './Icons'
 import { Sheet } from './Sheet'
@@ -52,6 +53,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
   const [incoming, setIncoming] = useState<Backup | null>(null)
   const [about, setAbout] = useState(false)
   const [appearance, setAppearance] = useState(false)
+  const [notifications, setNotifications] = useState(false)
   const [pinFlow, setPinFlow] = useState<null | 'set' | 'change' | 'remove' | 'export'>(null)
   const file = useRef<HTMLInputElement>(null)
   const set = (patch: Partial<Settings>) => actions.updateSettings(patch)
@@ -103,6 +105,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
   if (incoming) return <ImportSheet backup={incoming} onDone={() => setIncoming(null)} />
   if (about) return <AboutSheet onClose={() => setAbout(false)} />
   if (appearance) return <AppearanceSheet onClose={() => setAppearance(false)} />
+  if (notifications) return <NotificationsSheet onClose={() => setNotifications(false)} />
   if (pinFlow === 'set')
     return (
       <PinSheet
@@ -159,6 +162,16 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
               </span>
               <span className="about-value">
                 {themeDef(settings.theme).label} · {FONTS.find((f) => f.id === settings.font)?.label}
+                <IconRight width={16} height={16} aria-hidden />
+              </span>
+            </button>
+            <button className="about-row setting-link" onClick={() => setNotifications(true)}>
+              <span>
+                <b>Notifications</b>
+                <span className="xs muted">Reminders for your day and habits</span>
+              </span>
+              <span className="about-value">
+                {settings.notify.enabled ? 'On' : 'Off'}
                 <IconRight width={16} height={16} aria-hidden />
               </span>
             </button>

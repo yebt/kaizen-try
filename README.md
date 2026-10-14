@@ -44,6 +44,12 @@ A minimal, mobile-first habit tracker PWA. **Small steps, every day.**
     - On Android the diary is hidden from screenshots and the recent-apps preview.
     - The Today reminder is a discreet "Diary check-in" card.
 - **Icons:** about 200 line icons for habits (Lucide), in 12 categories such as health, fitness, food, learning, money and quit & limit. The icon picker has a search box that understands English and Spanish (`agua`, `water`, `gym`, `leer`), a category filter, and suggestions based on the habit's name. A new habit's icon follows its name until you pick one yourself. To add or retag icons, edit `scripts/gen-icon-catalog.py` and run it.
+- **Reminders** (Settings → Notifications), scheduled on the device, so they work with the app closed and after a restart (Android):
+  - a **morning plan** ("4 habits today — start with the easiest one") and an **evening check-in** that only fires if something is still open;
+  - **timed habits** remind at their calendar block (or 5/15 minutes before), one per block for habits with a time for each; any habit can have its own **custom reminder time**, or none, in its Edit screen;
+  - a habit you've already done doesn't remind you again that day; tapping a reminder opens Today;
+  - **Hide habit names** shows "Habit reminder" instead (lock screen included), and the diary check-in is always discreet;
+  - two weeks are planned ahead and re-planned whenever you open the app or change something. In the browser, reminders only arrive while Kaizen is open.
 - **Themes and fonts** (Settings → Appearance), applied instantly:
   - Themes: System, Paper (light), Ink (dark), Sand, Sage, Rose (light) and Ocean, Forest, Plum, Midnight (dark, Midnight is pure black for OLED). Each palette keeps text contrast at 4.5:1 or better.
   - Fonts: Editorial (serif titles, default), Modern, Classic (Fraunces), Rounded (Nunito), Readable (Atkinson Hyperlegible, made for low vision) and Device (your phone's font). Numbers always use a fixed-width font.

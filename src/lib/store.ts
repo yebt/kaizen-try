@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { todayKey, type DateKey } from './date'
 import { migrateLegacyIcon } from './iconMigration'
+import { DEFAULT_NOTIFY } from './notify'
 import type { Entry, Habit, Logs, Settings } from './types'
 
 export interface State {
@@ -23,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   font: 'editorial',
   diaryTab: false,
   blurPhotos: true,
+  notify: DEFAULT_NOTIFY,
 }
 
 const KEY = 'kaizen:v1'

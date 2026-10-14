@@ -43,6 +43,11 @@ export interface Habit {
   slots?: number[]
   /** Minutes. */
   duration: number
+  /**
+   * Reminder: minutes from midnight for a custom time, 'off' for none.
+   * Unset = default: timed habits follow their calendar blocks, untimed get none.
+   */
+  reminder?: number | 'off'
   /** Identity statement: "I'm becoming someone who…" */
   why?: string
   /** Implementation intention cue: "after coffee", "at the gym". */
@@ -107,6 +112,22 @@ export interface Settings {
   diaryTab: boolean
   /** Blur photo thumbnails until you open one. */
   blurPhotos: boolean
+  notify: NotifySettings
   /** Ask for a PIN to open the diary. Never exported in backups. */
   diaryPin?: PinLock
+}
+
+/** Local reminders (Settings → Notifications). Times are minutes from midnight; null = off. */
+export interface NotifySettings {
+  enabled: boolean
+  /** "Plan your day" summary. */
+  morning: number | null
+  /** "Anything left?" check-in. */
+  evening: number | null
+  /** Minutes before a timed habit's block; null = no automatic reminders. */
+  timedLead: number | null
+  /** Discreet diary check-in when one is due. */
+  diary: boolean
+  /** Say "Habit reminder" instead of the habit's name. */
+  hideNames: boolean
 }

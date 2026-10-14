@@ -14,8 +14,9 @@ import { haptic } from './lib/feedback'
 import { daySummary, streakOf } from './lib/habits'
 import { handleBackButton, setSystemBars } from './lib/native'
 import { themeDef } from './lib/themes'
+import { onReminderTap, syncReminders } from './lib/reminders'
 import { usePhotos } from './lib/photos'
-import { actions, useSettings, useStore } from './lib/store'
+import { actions, getSettings, useSettings, useStore } from './lib/store'
 import { dismiss, useToasts } from './lib/toast'
 
 type Tab = 'today' | 'calendar' | 'progress' | 'diary'
@@ -95,6 +96,23 @@ export default function App() {
 
   // The photo diary is private by default: it lives inside Progress unless you pin it to the tab bar.
   const tabs = settings.diaryTab ? ALL_TABS : ALL_TABS.filter((t) => t.id !== 'diary')
+
+  // Reminders are planned two weeks ahead; re-plan whenever habits, logs or settings change
+  // (so finishing a habit cancels its reminder) and whenever the app comes back to the front.
+  useEffect(() => {
+    if (!settings.notify.enabled) return
+    const t = setTimeout(() => void syncReminders(), 1200)
+    return () => clearTimeout(t)
+  }, [habits, logs, settings, photos?.length])
+  useEffect(() => {
+    const onShow = () => !document.hidden && getSettings().notify.enabled && void syncReminders()
+    document.addEventListener('visibilitychange', onShow)
+    const off = onReminderTap(() => setTab('today'))
+    return () => {
+      document.removeEventListener('visibilitychange', onShow)
+      off()
+    }
+  }, [])
 
   const tabRef = useRef(tab)
   tabRef.current = tab
